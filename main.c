@@ -4,4 +4,3 @@ int main() {
     printf("Trabajo practico\n");
     return 0;
 }
-//permatrago
