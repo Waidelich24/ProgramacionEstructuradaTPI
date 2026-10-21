@@ -32,8 +32,58 @@ int buscarVehiculoPorPatente(const char patente[]) {
 
     return -1;
 }
+
 void altaVehiculo(void) {
+   
+    Vehiculo nuevo;
+    FILE *archivo;
+
     printf("\n--- Alta de vehiculo ---\n");
+
+    printf("Patente: ");
+    scanf(" %11[^\n]", nuevo.patente);
+
+    if (buscarVehiculoPorPatente(nuevo.patente) != -1) {
+        printf("Error: ya existe un vehiculo con esa patente.\n");
+        return;
+    }
+
+    printf("Marca: ");
+    scanf(" %39[^\n]", nuevo.marca);
+
+    printf("Modelo: ");
+    scanf(" %39[^\n]", nuevo.modelo);
+
+    printf("Anio: ");
+    scanf("%d", &nuevo.anio);
+
+    printf("Tipo: ");
+    scanf(" %29[^\n]", nuevo.tipo);
+
+    printf("Capacidad: ");
+    scanf("%d", &nuevo.capacidad);
+
+    printf("Precio por dia: ");
+    scanf("%f", &nuevo.precioDia);
+
+    nuevo.estado = VEHICULO_DISPONIBLE;
+
+    archivo = fopen(ARCHIVO_VEHICULOS, "ab");
+
+    if (archivo == NULL) {
+        printf("Error: no se pudo abrir el archivo de vehiculos.\n");
+        return;
+    }
+
+    if (fwrite(&nuevo, sizeof(Vehiculo), 1, archivo) != 1) {
+        printf("Error al guardar el vehiculo.\n");
+        fclose(archivo);
+        return;
+    }
+
+    fclose(archivo);
+
+    printf("Vehiculo registrado correctamente.\n");
 }
 
 void listarVehiculos(void) {

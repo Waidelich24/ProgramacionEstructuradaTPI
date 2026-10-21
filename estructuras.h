@@ -12,7 +12,8 @@ typedef enum {
 typedef enum {
     VEHICULO_DISPONIBLE = 0,
     VEHICULO_ALQUILADO = 1,
-    VEHICULO_MANTENIMIENTO = 2
+    VEHICULO_MANTENIMIENTO = 2,
+    VEHICULO_BAJA = 3,
 } EstadoVehiculo;
 
 typedef enum {
