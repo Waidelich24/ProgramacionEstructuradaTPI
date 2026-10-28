@@ -1,0 +1,7 @@
+HISTORIAL DE MOVIMIENTOS - DNI: 44000111
+
+NroMov   NroAlq   Tipo       Monto        Fecha        Patente     
+------------------------------------------------------------
+1        1        Otro       $13542000.00 01/01/2020 AA123BB     
+2        1        Otro       $592000.00   01/02/2020 AA123BB     
+3        1        Pago       $592000.00   28/10/2026 AA123BB     
