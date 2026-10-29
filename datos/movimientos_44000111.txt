@@ -1,0 +1,5 @@
+=== HISTORIAL DE MOVIMIENTOS - CLIENTE DNI: 44000111 ===
+NroMov     NroAlq     Tipo       Monto        Fecha      Patente     
+-------------------------------------------------------------
+1          1          0          13542000.00  01/01/2020 AA123BB     
+2          1          2          592000.00    01/02/2020 AA123BB     
