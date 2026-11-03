@@ -1,7 +1,9 @@
 #ifndef ARCHIVOS_H
 #define ARCHIVOS_H
 
+#include <stdio.h>
 #include <stddef.h>
+#include "errores.h"
 
 /* Rutas de los archivos del sistema */
 #define DIRECTORIO_DATOS     "datos"
@@ -10,32 +12,38 @@
 #define ARCHIVO_ALQUILERES   "datos/alquileres.dat"
 #define ARCHIVO_MOVIMIENTOS  "datos/movimientos.dat"
 
-/* Capacidad maxima de registros (unica definicion para todos los modulos) */
-#define MAX_CLIENTES     500
-#define MAX_VEHICULOS    500
-#define MAX_ALQUILERES   1000
-#define MAX_MOVIMIENTOS  3000
-
 /*
- * Crea el directorio de datos y los archivos binarios si no existen,
- * verificando que puedan abrirse. Devuelve 1 si todo esta correcto.
+ * Capa de acceso a archivos. No hay limite de registros: cada operacion
+ * lee o escribe directamente sobre el archivo, de a un registro por vez.
  */
+
+/* Crea la carpeta y los archivos binarios si no existen y verifica que
+   puedan abrirse. Devuelve 1 si todo esta correcto. */
 int inicializarArchivos(void);
 
-/*
- * Lee hasta 'capacidad' registros. Devuelve la cantidad leida o -1 si el
- * archivo no puede abrirse, esta danado (tamanio no multiplo del registro)
- * o contiene mas registros que la capacidad (evita perder datos al guardar).
- */
-int leerRegistros(const char *ruta, void *registros,
-                  size_t tamRegistro, int capacidad);
+/* Cantidad de registros del archivo, o -1 si no puede abrirse o esta danado */
+long contarRegistros(const char *ruta, size_t tamRegistro);
 
-/* Reescribe el archivo completo. Devuelve 1 si se guardo correctamente. */
-int guardarRegistros(const char *ruta, const void *registros,
-                     size_t tamRegistro, int cantidad);
+/* Acceso directo por posicion (0 = primer registro) */
+CodigoError leerRegistroEn(const char *ruta, void *registro,
+                           size_t tamRegistro, long posicion);
+CodigoError escribirRegistroEn(const char *ruta, const void *registro,
+                               size_t tamRegistro, long posicion);
 
-/* Agrega un registro al final del archivo. Devuelve 1 si tuvo exito. */
-int agregarRegistro(const char *ruta, const void *registro,
-                    size_t tamRegistro);
+/* Agrega un registro al final del archivo */
+CodigoError agregarRegistro(const char *ruta, const void *registro,
+                            size_t tamRegistro);
+
+/* Deja el archivo vacio (se usa solo para regenerar datos de prueba) */
+CodigoError vaciarArchivo(const char *ruta);
+
+/* Lectura secuencial: abrirLectura / leerSiguiente / cerrarArchivo */
+FILE *abrirLectura(const char *ruta);
+int   leerSiguiente(FILE *archivo, void *registro, size_t tamRegistro);
+void  cerrarArchivo(FILE *archivo);
+
+/* Traduce el resultado de una busqueda (posicion >= 0, -1 no existe,
+   -2 error de archivo) a un codigo de error */
+CodigoError errorPorPosicion(long posicion);
 
 #endif

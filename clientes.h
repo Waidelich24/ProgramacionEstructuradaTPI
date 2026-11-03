@@ -2,13 +2,15 @@
 #define CLIENTES_H
 
 #include "estructuras.h"
+#include "errores.h"
 
-/* Devuelve la posicion del cliente en el archivo o -1 si no existe / error */
+/* Devuelve la posicion del cliente en el archivo, -1 si no existe
+   o -2 si el archivo no pudo leerse. */
 int buscarClientePorDNI(const char dni[]);
 
-/* Carga el cliente en *cliente. Devuelve 1 si existe, 0 si no existe
-   y -1 si el archivo no pudo leerse. */
-int obtenerCliente(const char dni[], Cliente *cliente);
+/* Carga el cliente en *cliente. Devuelve ERR_OK, ERR_NO_ENCONTRADO
+   o un error de archivo. */
+CodigoError obtenerCliente(const char dni[], Cliente *cliente);
 
 void menuClientes(void);
 void altaCliente(void);

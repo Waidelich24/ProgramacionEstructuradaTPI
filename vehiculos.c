@@ -12,97 +12,61 @@
    ACCESO A ARCHIVO
    ========================================================= */
 
-static int leerVehiculos(Vehiculo vehiculos[], int *cantidad)
+/* Busca por patente leyendo el archivo registro por registro.
+   Devuelve la posicion, -1 si no existe o -2 si no puede abrirse. */
+static long buscarVehiculo(const char patente[], Vehiculo *salida)
 {
-    int resultado = leerRegistros(ARCHIVO_VEHICULOS, vehiculos,
-                                  sizeof(Vehiculo), MAX_VEHICULOS);
+    FILE *archivo = abrirLectura(ARCHIVO_VEHICULOS);
+    Vehiculo actual;
+    long posicion = -1;
+    long indice = 0;
 
-    if (resultado < 0) {
-        printf("Error: no se pudo leer el archivo de vehiculos (%s).\n",
-               ARCHIVO_VEHICULOS);
-        return 0;
-    }
+    if (archivo == NULL) {
+        posicion = -2;
+    } else {
+        while (posicion < 0 &&
+               leerSiguiente(archivo, &actual, sizeof(Vehiculo))) {
+            if (strcmp(actual.patente, patente) == 0) {
+                posicion = indice;
 
-    *cantidad = resultado;
-    return 1;
-}
+                if (salida != NULL) {
+                    *salida = actual;
+                }
+            }
 
-static int guardarVehiculos(const Vehiculo vehiculos[], int cantidad)
-{
-    if (!guardarRegistros(ARCHIVO_VEHICULOS, vehiculos,
-                          sizeof(Vehiculo), cantidad)) {
-        printf("Error: no se pudo guardar el archivo de vehiculos.\n");
-        return 0;
-    }
-
-    return 1;
-}
-
-static int posicionVehiculo(const Vehiculo vehiculos[], int cantidad,
-                            const char patente[])
-{
-    int i;
-
-    for (i = 0; i < cantidad; i++) {
-        if (strcmp(vehiculos[i].patente, patente) == 0) {
-            return i;
+            indice++;
         }
+
+        cerrarArchivo(archivo);
     }
 
-    return -1;
+    return posicion;
 }
 
 int buscarVehiculoPorPatente(const char patente[])
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
-    int cantidad;
-
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return -1;
-    }
-
-    return posicionVehiculo(vehiculos, cantidad, patente);
+    return (int)buscarVehiculo(patente, NULL);
 }
 
-int obtenerVehiculo(const char patente[], Vehiculo *vehiculo)
+CodigoError obtenerVehiculo(const char patente[], Vehiculo *vehiculo)
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
-    int cantidad;
-    int posicion;
-
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return -1;
-    }
-
-    posicion = posicionVehiculo(vehiculos, cantidad, patente);
-
-    if (posicion < 0) {
-        return 0;
-    }
-
-    *vehiculo = vehiculos[posicion];
-    return 1;
+    return errorPorPosicion(buscarVehiculo(patente, vehiculo));
 }
 
-int actualizarEstadoVehiculo(const char patente[], EstadoVehiculo estado)
+CodigoError actualizarEstadoVehiculo(const char patente[],
+                                     EstadoVehiculo estado)
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
-    int cantidad;
-    int posicion;
+    Vehiculo vehiculo;
+    long posicion = buscarVehiculo(patente, &vehiculo);
+    CodigoError error = errorPorPosicion(posicion);
 
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return 0;
+    if (error == ERR_OK) {
+        vehiculo.estado = estado;
+        error = escribirRegistroEn(ARCHIVO_VEHICULOS, &vehiculo,
+                                   sizeof(Vehiculo), posicion);
     }
 
-    posicion = posicionVehiculo(vehiculos, cantidad, patente);
-
-    if (posicion < 0) {
-        printf("Error: no existe el vehiculo %s.\n", patente);
-        return 0;
-    }
-
-    vehiculos[posicion].estado = estado;
-    return guardarVehiculos(vehiculos, cantidad);
+    return error;
 }
 
 /* =========================================================
@@ -148,79 +112,90 @@ static int pedirDatoVehiculo(Vehiculo *v, int campo)
 {
     int numero;
     float precio;
+    int ok = 0;
 
     switch (campo) {
         case 1:
-            return pedirCampo("Marca", v->marca, sizeof(v->marca),
-                              NULL, NULL);
+            ok = pedirCampo("Marca", v->marca, sizeof(v->marca), NULL, NULL);
+            break;
 
         case 2:
-            return pedirCampo("Modelo", v->modelo, sizeof(v->modelo),
-                              NULL, NULL);
+            ok = pedirCampo("Modelo", v->modelo, sizeof(v->modelo),
+                            NULL, NULL);
+            break;
 
         case 3:
-            if (!pedirEntero("Anio de fabricacion", ANIO_VEHICULO_MINIMO,
-                             fechaActual().anio + 1, &numero)) {
-                return 0;
-            }
+            ok = pedirEntero("Anio de fabricacion", ANIO_VEHICULO_MINIMO,
+                             fechaActual().anio + 1, &numero);
 
-            v->anio = numero;
-            return 1;
+            if (ok) {
+                v->anio = numero;
+            }
+            break;
 
         case 4:
-            return pedirCampo("Tipo (sedan, pick-up, utilitario...)",
-                              v->tipo, sizeof(v->tipo), NULL, NULL);
+            ok = pedirCampo("Tipo (sedan, pick-up, utilitario...)",
+                            v->tipo, sizeof(v->tipo), NULL, NULL);
+            break;
 
         case 5:
-            if (!pedirEntero("Capacidad de pasajeros", 1, CAPACIDAD_MAXIMA,
-                             &numero)) {
-                return 0;
-            }
+            ok = pedirEntero("Capacidad de pasajeros", 1, CAPACIDAD_MAXIMA,
+                             &numero);
 
-            v->capacidad = numero;
-            return 1;
+            if (ok) {
+                v->capacidad = numero;
+            }
+            break;
 
         case 6:
-            if (!pedirMonto("Precio por dia", 0.0f, &precio)) {
-                return 0;
-            }
+            ok = pedirMonto("Precio por dia", 0.0f, &precio);
 
-            v->precioDia = precio;
-            return 1;
+            if (ok) {
+                v->precioDia = precio;
+            }
+            break;
 
         default:
-            return 0;
+            break;
     }
+
+    return ok;
 }
 
-/* Cambia el estado manual (mantenimiento / baja / disponible) */
+/* Cambia el estado manual (mantenimiento / baja / disponible).
+   Devuelve 1 si se eligio un estado nuevo. */
 static int pedirNuevoEstado(Vehiculo *v)
 {
     int opcion;
+    int cambiado = 0;
 
     if (v->estado == VEHICULO_ALQUILADO) {
         printf("Error: el vehiculo esta alquilado. Registre primero la "
                "devolucion para poder cambiar su estado.\n");
-        return 0;
-    }
+    } else {
+        printf("\nSeleccione el nuevo estado:\n");
+        printf("1. Disponible\n");
+        printf("2. En mantenimiento\n");
+        printf("3. Baja\n");
+        printf("0. Cancelar\n");
 
-    printf("\nSeleccione el nuevo estado:\n");
-    printf("1. Disponible\n");
-    printf("2. En mantenimiento\n");
-    printf("3. Baja\n");
-    printf("0. Cancelar\n");
+        opcion = leerOpcion("Opcion: ");
 
-    opcion = leerOpcion("Opcion: ");
-
-    switch (opcion) {
-        case 1: v->estado = VEHICULO_DISPONIBLE;    return 1;
-        case 2: v->estado = VEHICULO_MANTENIMIENTO; return 1;
-        case 3: v->estado = VEHICULO_BAJA;          return 1;
-        case 0: return 0;
-        default:
+        if (opcion == 1) {
+            v->estado = VEHICULO_DISPONIBLE;
+            cambiado = 1;
+        } else if (opcion == 2) {
+            v->estado = VEHICULO_MANTENIMIENTO;
+            cambiado = 1;
+        } else if (opcion == 3) {
+            v->estado = VEHICULO_BAJA;
+            cambiado = 1;
+        } else if (opcion != 0) {
             printf("Error: opcion invalida.\n");
-            return 0;
+        }
     }
+
+    return cambiado;
 }
 
 /* =========================================================
@@ -229,108 +204,116 @@ static int pedirNuevoEstado(Vehiculo *v)
 
 void altaVehiculo(void)
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
     Vehiculo nuevo;
-    int cantidad;
+    CodigoError error = ERR_OK;
+    long posicion;
     int campo;
 
     mostrarTitulo("ALTA DE VEHICULO");
-
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return;
-    }
-
-    if (cantidad >= MAX_VEHICULOS) {
-        printf("Error: se alcanzo el limite de %d vehiculos.\n",
-               MAX_VEHICULOS);
-        return;
-    }
-
     memset(&nuevo, 0, sizeof(Vehiculo));
 
     if (!pedirPatente(nuevo.patente)) {
-        mostrarCancelado();
-        return;
+        error = ERR_CANCELADO;
     }
 
-    if (posicionVehiculo(vehiculos, cantidad, nuevo.patente) >= 0) {
-        printf("Error: ya existe un vehiculo con la patente %s.\n",
-               nuevo.patente);
-        return;
-    }
+    if (error == ERR_OK) {
+        posicion = buscarVehiculo(nuevo.patente, NULL);
 
-    for (campo = 1; campo <= 6; campo++) {
-        if (!pedirDatoVehiculo(&nuevo, campo)) {
-            mostrarCancelado();
-            return;
+        if (posicion >= 0) {
+            error = ERR_DUPLICADO;
+            printf("Error: ya existe un vehiculo con la patente %s.\n",
+                   nuevo.patente);
+        } else if (posicion < -1) {
+            error = ERR_ARCHIVO_LEER;
+            mostrarError(error, ARCHIVO_VEHICULOS);
         }
     }
 
-    nuevo.estado = VEHICULO_DISPONIBLE;
-
-    if (!agregarRegistro(ARCHIVO_VEHICULOS, &nuevo, sizeof(Vehiculo))) {
-        printf("Error: no se pudo guardar el vehiculo.\n");
-        return;
+    for (campo = 1; error == ERR_OK && campo <= 6; campo++) {
+        if (!pedirDatoVehiculo(&nuevo, campo)) {
+            error = ERR_CANCELADO;
+        }
     }
 
-    printf("\nVehiculo registrado correctamente.\n");
-    mostrarVehiculo(&nuevo);
+    if (error == ERR_OK) {
+        nuevo.estado = VEHICULO_DISPONIBLE;
+        error = agregarRegistro(ARCHIVO_VEHICULOS, &nuevo, sizeof(Vehiculo));
+
+        if (error == ERR_OK) {
+            printf("\nVehiculo registrado correctamente.\n");
+            mostrarVehiculo(&nuevo);
+        } else {
+            mostrarError(error, ARCHIVO_VEHICULOS);
+        }
+    }
+
+    if (error == ERR_CANCELADO) {
+        mostrarCancelado();
+    }
 }
 
 void listarVehiculos(void)
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
-    int cantidad;
-    int i;
+    FILE *archivo;
+    Vehiculo vehiculo;
+    int cantidad = 0;
 
     mostrarTitulo("LISTADO DE VEHICULOS");
+    archivo = abrirLectura(ARCHIVO_VEHICULOS);
 
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return;
+    if (archivo == NULL) {
+        mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_VEHICULOS);
+    } else {
+        while (leerSiguiente(archivo, &vehiculo, sizeof(Vehiculo))) {
+            if (cantidad == 0) {
+                imprimirEncabezadoVehiculos();
+            }
+
+            imprimirFilaVehiculo(&vehiculo);
+            cantidad++;
+        }
+
+        cerrarArchivo(archivo);
+
+        if (cantidad == 0) {
+            printf("No hay vehiculos registrados.\n");
+        } else {
+            printf("\nTotal de vehiculos: %d\n", cantidad);
+        }
     }
-
-    if (cantidad == 0) {
-        printf("No hay vehiculos registrados.\n");
-        return;
-    }
-
-    imprimirEncabezadoVehiculos();
-
-    for (i = 0; i < cantidad; i++) {
-        imprimirFilaVehiculo(&vehiculos[i]);
-    }
-
-    printf("\nTotal de vehiculos: %d\n", cantidad);
 }
 
 int listarVehiculosDisponibles(void)
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
-    int cantidad;
-    int i;
+    FILE *archivo;
+    Vehiculo vehiculo;
     int disponibles = 0;
 
     mostrarTitulo("VEHICULOS DISPONIBLES");
+    archivo = abrirLectura(ARCHIVO_VEHICULOS);
 
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return -1;
-    }
-
-    for (i = 0; i < cantidad; i++) {
-        if (vehiculos[i].estado == VEHICULO_DISPONIBLE) {
-            if (disponibles == 0) {
-                imprimirEncabezadoVehiculos();
-            }
-
-            imprimirFilaVehiculo(&vehiculos[i]);
-            disponibles++;
-        }
-    }
-
-    if (disponibles == 0) {
-        printf("No hay vehiculos disponibles en este momento.\n");
+    if (archivo == NULL) {
+        mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_VEHICULOS);
+        disponibles = -1;
     } else {
-        printf("\nVehiculos disponibles: %d\n", disponibles);
+        while (leerSiguiente(archivo, &vehiculo, sizeof(Vehiculo))) {
+            if (vehiculo.estado == VEHICULO_DISPONIBLE) {
+                if (disponibles == 0) {
+                    imprimirEncabezadoVehiculos();
+                }
+
+                imprimirFilaVehiculo(&vehiculo);
+                disponibles++;
+            }
+        }
+
+        cerrarArchivo(archivo);
+
+        if (disponibles == 0) {
+            printf("No hay vehiculos disponibles en este momento.\n");
+        } else {
+            printf("\nVehiculos disponibles: %d\n", disponibles);
+        }
     }
 
     return disponibles;
@@ -339,109 +322,114 @@ int listarVehiculosDisponibles(void)
 void consultarVehiculo(void)
 {
     Vehiculo vehiculo;
+    CodigoError error = ERR_OK;
     char patente[12];
-    int resultado;
 
     mostrarTitulo("BUSCAR VEHICULO");
 
     if (!pedirPatente(patente)) {
+        error = ERR_CANCELADO;
+    } else {
+        error = obtenerVehiculo(patente, &vehiculo);
+
+        if (error == ERR_NO_ENCONTRADO) {
+            printf("Error: no existe un vehiculo con la patente %s.\n",
+                   patente);
+        } else if (error != ERR_OK) {
+            mostrarError(error, ARCHIVO_VEHICULOS);
+        }
+    }
+
+    if (error == ERR_OK) {
+        mostrarVehiculo(&vehiculo);
+    } else if (error == ERR_CANCELADO) {
         mostrarCancelado();
-        return;
     }
-
-    resultado = obtenerVehiculo(patente, &vehiculo);
-
-    if (resultado < 0) {
-        return;
-    }
-
-    if (resultado == 0) {
-        printf("Error: no existe un vehiculo con la patente %s.\n", patente);
-        return;
-    }
-
-    mostrarVehiculo(&vehiculo);
 }
 
 void modificarVehiculo(void)
 {
-    Vehiculo vehiculos[MAX_VEHICULOS];
     Vehiculo editado;
+    CodigoError error = ERR_OK;
     char patente[12];
-    int cantidad;
-    int posicion;
-    int opcion;
+    long posicion = -1;
+    int opcion = 0;
     int campo;
 
     mostrarTitulo("MODIFICAR VEHICULO");
 
-    if (!leerVehiculos(vehiculos, &cantidad)) {
-        return;
-    }
-
     if (!pedirPatente(patente)) {
-        mostrarCancelado();
-        return;
+        error = ERR_CANCELADO;
     }
 
-    posicion = posicionVehiculo(vehiculos, cantidad, patente);
+    if (error == ERR_OK) {
+        posicion = buscarVehiculo(patente, &editado);
+        error = errorPorPosicion(posicion);
 
-    if (posicion < 0) {
-        printf("Error: no existe un vehiculo con la patente %s.\n", patente);
-        return;
-    }
-
-    printf("\nDatos actuales:");
-    mostrarVehiculo(&vehiculos[posicion]);
-
-    printf("Que desea modificar?\n");
-    printf("1. Marca\n");
-    printf("2. Modelo\n");
-    printf("3. Anio\n");
-    printf("4. Tipo de vehiculo\n");
-    printf("5. Capacidad\n");
-    printf("6. Precio por dia\n");
-    printf("7. Estado\n");
-    printf("8. Todos los datos (excepto el estado)\n");
-    printf("0. Cancelar\n");
-
-    opcion = leerOpcion("Seleccione una opcion: ");
-
-    if (opcion == 0) {
-        mostrarCancelado();
-        return;
-    }
-
-    if (opcion < 1 || opcion > 8) {
-        printf("Error: opcion invalida.\n");
-        return;
-    }
-
-    /* Se edita una copia: si el usuario cancela no se altera nada */
-    editado = vehiculos[posicion];
-
-    if (opcion == 7) {
-        if (!pedirNuevoEstado(&editado)) {
-            mostrarCancelado();
-            return;
+        if (error == ERR_NO_ENCONTRADO) {
+            printf("Error: no existe un vehiculo con la patente %s.\n",
+                   patente);
+        } else if (error != ERR_OK) {
+            mostrarError(error, ARCHIVO_VEHICULOS);
         }
-    } else if (opcion == 8) {
-        for (campo = 1; campo <= 6; campo++) {
-            if (!pedirDatoVehiculo(&editado, campo)) {
-                mostrarCancelado();
-                return;
+    }
+
+    if (error == ERR_OK) {
+        printf("\nDatos actuales:");
+        mostrarVehiculo(&editado);
+
+        printf("Que desea modificar?\n");
+        printf("1. Marca\n");
+        printf("2. Modelo\n");
+        printf("3. Anio\n");
+        printf("4. Tipo de vehiculo\n");
+        printf("5. Capacidad\n");
+        printf("6. Precio por dia\n");
+        printf("7. Estado\n");
+        printf("8. Todos los datos (excepto el estado)\n");
+        printf("0. Cancelar\n");
+
+        opcion = leerOpcion("Seleccione una opcion: ");
+
+        if (opcion == 0) {
+            error = ERR_CANCELADO;
+        } else if (opcion < 1 || opcion > 8) {
+            error = ERR_DATO_INVALIDO;
+            printf("Error: opcion invalida.\n");
+        }
+    }
+
+    /* Se edita la copia en memoria: si se cancela, el archivo no cambia */
+    if (error == ERR_OK) {
+        if (opcion == 7) {
+            if (!pedirNuevoEstado(&editado)) {
+                error = ERR_CANCELADO;
             }
+        } else if (opcion == 8) {
+            for (campo = 1; error == ERR_OK && campo <= 6; campo++) {
+                if (!pedirDatoVehiculo(&editado, campo)) {
+                    error = ERR_CANCELADO;
+                }
+            }
+        } else if (!pedirDatoVehiculo(&editado, opcion)) {
+            error = ERR_CANCELADO;
         }
-    } else if (!pedirDatoVehiculo(&editado, opcion)) {
-        mostrarCancelado();
-        return;
     }
 
-    vehiculos[posicion] = editado;
+    if (error == ERR_OK) {
+        error = escribirRegistroEn(ARCHIVO_VEHICULOS, &editado,
+                                   sizeof(Vehiculo), posicion);
 
-    if (guardarVehiculos(vehiculos, cantidad)) {
-        printf("\nVehiculo modificado correctamente.\n");
-        mostrarVehiculo(&vehiculos[posicion]);
+        if (error == ERR_OK) {
+            printf("\nVehiculo modificado correctamente.\n");
+            mostrarVehiculo(&editado);
+        } else {
+            mostrarError(error, ARCHIVO_VEHICULOS);
+        }
+    }
+
+    if (error == ERR_CANCELADO) {
+        mostrarCancelado();
     }
 }
 

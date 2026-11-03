@@ -2,16 +2,19 @@
 #define VEHICULOS_H
 
 #include "estructuras.h"
+#include "errores.h"
 
-/* Devuelve la posicion del vehiculo en el archivo o -1 si no existe / error */
+/* Devuelve la posicion del vehiculo en el archivo, -1 si no existe
+   o -2 si el archivo no pudo leerse. */
 int buscarVehiculoPorPatente(const char patente[]);
 
-/* Carga el vehiculo en *vehiculo. Devuelve 1 si existe, 0 si no existe
-   y -1 si el archivo no pudo leerse. */
-int obtenerVehiculo(const char patente[], Vehiculo *vehiculo);
+/* Carga el vehiculo en *vehiculo. Devuelve ERR_OK, ERR_NO_ENCONTRADO
+   o un error de archivo. */
+CodigoError obtenerVehiculo(const char patente[], Vehiculo *vehiculo);
 
-/* Cambia el estado de un vehiculo y lo guarda. Devuelve 1 si tuvo exito. */
-int actualizarEstadoVehiculo(const char patente[], EstadoVehiculo estado);
+/* Cambia el estado de un vehiculo directamente en el archivo */
+CodigoError actualizarEstadoVehiculo(const char patente[],
+                                     EstadoVehiculo estado);
 
 void menuVehiculos(void);
 void altaVehiculo(void);

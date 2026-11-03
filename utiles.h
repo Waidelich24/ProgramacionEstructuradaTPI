@@ -2,6 +2,7 @@
 #define UTILES_H
 
 #include "estructuras.h"
+#include "errores.h"
 
 #define ANIO_MINIMO 1900
 #define ANIO_MAXIMO 2100
@@ -12,9 +13,11 @@
  * dato sea invalido se informa el problema y se vuelve a pedir.
  */
 
-/* ---------- Presentacion ---------- */
+/* ---------- Presentacion y errores ---------- */
 void mostrarTitulo(const char *titulo);
 void mostrarCancelado(void);
+const char *textoError(CodigoError error);
+void mostrarError(CodigoError error, const char *detalle);
 
 /* ---------- Entrada por teclado (siempre por lineas, sin scanf) ---------- */
 int  leerLinea(const char *mensaje, char texto[], int tam);

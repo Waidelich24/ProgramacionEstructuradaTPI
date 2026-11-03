@@ -9,42 +9,42 @@
 #include "archivos.h"
 #include "utiles.h"
 
+/* Filtro aplicado a cada alquiler leido del archivo; recibe un dato
+   (rango, DNI, patente, estado o importe) segun la consulta. */
+typedef int (*FiltroAlquiler)(const Alquiler *alquiler, const void *dato);
+
+typedef struct {
+    Fecha desde;
+    Fecha hasta;
+} Rango;
+
+typedef struct {
+    float importe;
+    int mayor;      /* 1 = superiores, 0 = inferiores */
+} FiltroImporte;
+
 /* =========================================================
    FUNCIONES AUXILIARES
    ========================================================= */
 
-static int cargarAlquileres(Alquiler alquileres[], int *cantidad)
-{
-    int resultado = leerRegistros(ARCHIVO_ALQUILERES, alquileres,
-                                  sizeof(Alquiler), MAX_ALQUILERES);
-
-    if (resultado < 0) {
-        printf("Error: no se pudo leer el archivo de alquileres.\n");
-        return 0;
-    }
-
-    *cantidad = resultado;
-    return 1;
-}
-
 /* Pide un rango de fechas y verifica que el inicial no sea posterior */
 static int pedirRangoFechas(Fecha *desde, Fecha *hasta)
 {
-    if (!pedirFecha("Fecha inicial del periodo", desde)) {
-        return 0;
-    }
+    int valido = 0;
+    int cancelado = !pedirFecha("Fecha inicial del periodo", desde);
 
-    while (1) {
+    while (!cancelado && !valido) {
         if (!pedirFecha("Fecha final del periodo", hasta)) {
-            return 0;
+            cancelado = 1;
+        } else if (compararFechas(*desde, *hasta) <= 0) {
+            valido = 1;
+        } else {
+            printf("Error: la fecha final no puede ser anterior a la "
+                   "inicial.\n");
         }
-
-        if (compararFechas(*desde, *hasta) <= 0) {
-            return 1;
-        }
-
-        printf("Error: la fecha final no puede ser anterior a la inicial.\n");
     }
+
+    return valido;
 }
 
 static int fechaEnRango(Fecha fecha, Fecha desde, Fecha hasta)
@@ -60,6 +60,73 @@ static void imprimirPeriodo(Fecha desde, Fecha hasta)
     printf(" al ");
     imprimirFecha(hasta);
     printf("\n\n");
+}
+
+/* Recorre alquileres.dat y muestra los que cumplen el filtro */
+static CodigoError listarAlquileresFiltrados(FiltroAlquiler filtro,
+                                             const void *dato,
+                                             const char *sinResultados)
+{
+    FILE *archivo = abrirLectura(ARCHIVO_ALQUILERES);
+    Alquiler alquiler;
+    CodigoError error = ERR_OK;
+    int encontrados = 0;
+
+    if (archivo == NULL) {
+        error = ERR_ARCHIVO_ABRIR;
+        mostrarError(error, ARCHIVO_ALQUILERES);
+    } else {
+        while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            if (filtro(&alquiler, dato)) {
+                if (encontrados == 0) {
+                    imprimirEncabezadoAlquileres();
+                }
+
+                imprimirFilaAlquiler(&alquiler);
+                encontrados++;
+            }
+        }
+
+        cerrarArchivo(archivo);
+
+        if (encontrados == 0) {
+            printf("%s\n", sinResultados);
+        } else {
+            printf("\nAlquileres encontrados: %d\n", encontrados);
+        }
+    }
+
+    return error;
+}
+
+static int filtroPorFecha(const Alquiler *alquiler, const void *dato)
+{
+    const Rango *rango = (const Rango *)dato;
+
+    return fechaEnRango(alquiler->fechaInicio, rango->desde, rango->hasta);
+}
+
+static int filtroPorCliente(const Alquiler *alquiler, const void *dato)
+{
+    return strcmp(alquiler->dniCliente, (const char *)dato) == 0;
+}
+
+static int filtroPorVehiculo(const Alquiler *alquiler, const void *dato)
+{
+    return strcmp(alquiler->patente, (const char *)dato) == 0;
+}
+
+static int filtroPorEstado(const Alquiler *alquiler, const void *dato)
+{
+    return alquiler->estado == *(const EstadoAlquiler *)dato;
+}
+
+static int filtroPorImporte(const Alquiler *alquiler, const void *dato)
+{
+    const FiltroImporte *filtro = (const FiltroImporte *)dato;
+
+    return filtro->mayor ? alquiler->importeTotal > filtro->importe
+                         : alquiler->importeTotal < filtro->importe;
 }
 
 /* =========================================================
@@ -118,76 +185,64 @@ void vehiculosDisponibles(void)
 
 void vehiculosAlquilados(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
+    FILE *archivo;
+    Alquiler alquiler;
     Cliente cliente;
     Vehiculo vehiculo;
     char marcaModelo[90];
     char clienteTexto[100];
-    int cantidad;
-    int i;
-    int resultado;
     int encontrados = 0;
 
     mostrarTitulo("VEHICULOS ALQUILADOS");
+    archivo = abrirLectura(ARCHIVO_ALQUILERES);
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
+    if (archivo == NULL) {
+        mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_ALQUILERES);
+    } else {
+        while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            if (alquiler.estado == ALQUILER_ACTIVO) {
+                if (obtenerVehiculo(alquiler.patente, &vehiculo) == ERR_OK) {
+                    snprintf(marcaModelo, sizeof(marcaModelo), "%s %s",
+                             vehiculo.marca, vehiculo.modelo);
+                } else {
+                    snprintf(marcaModelo, sizeof(marcaModelo),
+                             "(vehiculo no encontrado)");
+                }
 
-    for (i = 0; i < cantidad; i++) {
-        if (alquileres[i].estado != ALQUILER_ACTIVO) {
-            continue;
+                if (obtenerCliente(alquiler.dniCliente, &cliente) == ERR_OK) {
+                    snprintf(clienteTexto, sizeof(clienteTexto), "%s (%s)",
+                             cliente.nombre, cliente.dni);
+                } else {
+                    snprintf(clienteTexto, sizeof(clienteTexto),
+                             "%s (no encontrado)", alquiler.dniCliente);
+                }
+
+                if (encontrados == 0) {
+                    printf("%-9s %-26s %-40s %-10s %-10s\n", "Patente",
+                           "Marca y modelo", "Cliente", "Inicio",
+                           "Prevista");
+                    printf("-------------------------------------------------"
+                           "---------------------------------------------"
+                           "---\n");
+                }
+
+                printf("%-9s %-26.26s %-40.40s ", alquiler.patente,
+                       marcaModelo, clienteTexto);
+                imprimirFecha(alquiler.fechaInicio);
+                printf(" ");
+                imprimirFecha(alquiler.fechaPrevista);
+                printf("\n");
+                encontrados++;
+            }
         }
 
-        resultado = obtenerVehiculo(alquileres[i].patente, &vehiculo);
-
-        if (resultado < 0) {
-            return;
-        }
-
-        if (resultado == 1) {
-            snprintf(marcaModelo, sizeof(marcaModelo), "%s %s",
-                     vehiculo.marca, vehiculo.modelo);
-        } else {
-            snprintf(marcaModelo, sizeof(marcaModelo),
-                     "(vehiculo no encontrado)");
-        }
-
-        resultado = obtenerCliente(alquileres[i].dniCliente, &cliente);
-
-        if (resultado < 0) {
-            return;
-        }
-
-        if (resultado == 1) {
-            snprintf(clienteTexto, sizeof(clienteTexto), "%s (%s)",
-                     cliente.nombre, cliente.dni);
-        } else {
-            snprintf(clienteTexto, sizeof(clienteTexto), "%s (no encontrado)",
-                     alquileres[i].dniCliente);
-        }
+        cerrarArchivo(archivo);
 
         if (encontrados == 0) {
-            printf("%-9s %-26s %-40s %-10s %-10s\n", "Patente",
-                   "Marca y modelo", "Cliente", "Inicio", "Prevista");
-            printf("-----------------------------------------------------"
-                   "-----------------------------------------------\n");
+            printf("No hay vehiculos alquilados actualmente.\n");
+        } else {
+            printf("\nVehiculos alquilados: %d\n", encontrados);
         }
-
-        printf("%-9s %-26.26s %-40.40s ", alquileres[i].patente,
-               marcaModelo, clienteTexto);
-        imprimirFecha(alquileres[i].fechaInicio);
-        printf(" ");
-        imprimirFecha(alquileres[i].fechaPrevista);
-        printf("\n");
-
-        encontrados++;
-    }
-
-    if (encontrados == 0) {
-        printf("No hay vehiculos alquilados actualmente.\n");
-    } else {
-        printf("\nVehiculos alquilados: %d\n", encontrados);
     }
 }
 
@@ -197,158 +252,87 @@ void vehiculosAlquilados(void)
 
 void alquileresPorFecha(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    Fecha desde;
-    Fecha hasta;
-    int cantidad;
-    int i;
-    int encontrados = 0;
+    Rango rango;
 
     mostrarTitulo("ALQUILERES POR RANGO DE FECHAS");
 
-    if (!pedirRangoFechas(&desde, &hasta)) {
-        mostrarCancelado();
-        return;
-    }
-
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
-
-    printf("\n");
-    imprimirPeriodo(desde, hasta);
-
-    for (i = 0; i < cantidad; i++) {
-        if (fechaEnRango(alquileres[i].fechaInicio, desde, hasta)) {
-            if (encontrados == 0) {
-                imprimirEncabezadoAlquileres();
-            }
-
-            imprimirFilaAlquiler(&alquileres[i]);
-            encontrados++;
-        }
-    }
-
-    if (encontrados == 0) {
-        printf("No hay alquileres iniciados dentro del periodo indicado.\n");
+    if (pedirRangoFechas(&rango.desde, &rango.hasta)) {
+        printf("\n");
+        imprimirPeriodo(rango.desde, rango.hasta);
+        listarAlquileresFiltrados(filtroPorFecha, &rango,
+                                  "No hay alquileres iniciados dentro del "
+                                  "periodo indicado.");
     } else {
-        printf("\nAlquileres encontrados: %d\n", encontrados);
+        mostrarCancelado();
     }
 }
 
 void alquileresPorCliente(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
     Cliente cliente;
+    CodigoError error = ERR_OK;
     char dni[12];
-    int cantidad;
-    int resultado;
-    int i;
-    int encontrados = 0;
 
     mostrarTitulo("ALQUILERES POR CLIENTE");
 
     if (!pedirDNI(dni)) {
-        mostrarCancelado();
-        return;
-    }
+        error = ERR_CANCELADO;
+    } else {
+        error = obtenerCliente(dni, &cliente);
 
-    resultado = obtenerCliente(dni, &cliente);
-
-    if (resultado < 0) {
-        return;
-    }
-
-    if (resultado == 0) {
-        printf("Error: no existe un cliente con el DNI %s.\n", dni);
-        return;
-    }
-
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
-
-    printf("\nCliente: %s (DNI %s)\n\n", cliente.nombre, cliente.dni);
-
-    for (i = 0; i < cantidad; i++) {
-        if (strcmp(alquileres[i].dniCliente, dni) == 0) {
-            if (encontrados == 0) {
-                imprimirEncabezadoAlquileres();
-            }
-
-            imprimirFilaAlquiler(&alquileres[i]);
-            encontrados++;
+        if (error == ERR_NO_ENCONTRADO) {
+            printf("Error: no existe un cliente con el DNI %s.\n", dni);
+        } else if (error != ERR_OK) {
+            mostrarError(error, ARCHIVO_CLIENTES);
         }
     }
 
-    if (encontrados == 0) {
-        printf("El cliente no tiene alquileres registrados.\n");
-    } else {
-        printf("\nAlquileres encontrados: %d\n", encontrados);
+    if (error == ERR_OK) {
+        printf("\nCliente: %s (DNI %s)\n\n", cliente.nombre, cliente.dni);
+        listarAlquileresFiltrados(filtroPorCliente, dni,
+                                  "El cliente no tiene alquileres "
+                                  "registrados.");
+    } else if (error == ERR_CANCELADO) {
+        mostrarCancelado();
     }
 }
 
 void alquileresPorVehiculo(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
     Vehiculo vehiculo;
+    CodigoError error = ERR_OK;
     char patente[12];
-    int cantidad;
-    int resultado;
-    int i;
-    int encontrados = 0;
 
     mostrarTitulo("ALQUILERES POR VEHICULO");
 
     if (!pedirPatente(patente)) {
-        mostrarCancelado();
-        return;
-    }
+        error = ERR_CANCELADO;
+    } else {
+        error = obtenerVehiculo(patente, &vehiculo);
 
-    resultado = obtenerVehiculo(patente, &vehiculo);
-
-    if (resultado < 0) {
-        return;
-    }
-
-    if (resultado == 0) {
-        printf("Error: no existe un vehiculo con la patente %s.\n", patente);
-        return;
-    }
-
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
-
-    printf("\nVehiculo: %s %s (%s)\n\n", vehiculo.marca, vehiculo.modelo,
-           vehiculo.patente);
-
-    for (i = 0; i < cantidad; i++) {
-        if (strcmp(alquileres[i].patente, patente) == 0) {
-            if (encontrados == 0) {
-                imprimirEncabezadoAlquileres();
-            }
-
-            imprimirFilaAlquiler(&alquileres[i]);
-            encontrados++;
+        if (error == ERR_NO_ENCONTRADO) {
+            printf("Error: no existe un vehiculo con la patente %s.\n",
+                   patente);
+        } else if (error != ERR_OK) {
+            mostrarError(error, ARCHIVO_VEHICULOS);
         }
     }
 
-    if (encontrados == 0) {
-        printf("El vehiculo no tiene alquileres registrados.\n");
-    } else {
-        printf("\nAlquileres encontrados: %d\n", encontrados);
+    if (error == ERR_OK) {
+        printf("\nVehiculo: %s %s (%s)\n\n", vehiculo.marca, vehiculo.modelo,
+               vehiculo.patente);
+        listarAlquileresFiltrados(filtroPorVehiculo, patente,
+                                  "El vehiculo no tiene alquileres "
+                                  "registrados.");
+    } else if (error == ERR_CANCELADO) {
+        mostrarCancelado();
     }
 }
 
 void alquileresPorEstado(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
     EstadoAlquiler estado;
-    int cantidad;
     int opcion;
-    int i;
-    int encontrados = 0;
 
     mostrarTitulo("ALQUILERES POR ESTADO");
     printf("1. Activos\n");
@@ -358,97 +342,42 @@ void alquileresPorEstado(void)
 
     opcion = leerOpcion("Seleccione el estado: ");
 
-    if (opcion == 0) {
-        return;
-    }
-
-    if (opcion < 1 || opcion > 3) {
+    if (opcion >= 1 && opcion <= 3) {
+        estado = (EstadoAlquiler)(opcion - 1);
+        printf("\nAlquileres %s:\n\n", textoEstadoAlquiler(estado));
+        listarAlquileresFiltrados(filtroPorEstado, &estado,
+                                  "No hay alquileres con ese estado.");
+    } else if (opcion != 0) {
         printf("Error: opcion invalida.\n");
-        return;
-    }
-
-    estado = (EstadoAlquiler)(opcion - 1);
-
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
-
-    printf("\nAlquileres %s:\n\n", textoEstadoAlquiler(estado));
-
-    for (i = 0; i < cantidad; i++) {
-        if (alquileres[i].estado == estado) {
-            if (encontrados == 0) {
-                imprimirEncabezadoAlquileres();
-            }
-
-            imprimirFilaAlquiler(&alquileres[i]);
-            encontrados++;
-        }
-    }
-
-    if (encontrados == 0) {
-        printf("No hay alquileres con ese estado.\n");
-    } else {
-        printf("\nAlquileres encontrados: %d\n", encontrados);
     }
 }
 
 void alquileresPorImporte(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    float importe;
-    int cantidad;
+    FiltroImporte filtro;
     int opcion;
-    int i;
-    int coincide;
-    int encontrados = 0;
 
     mostrarTitulo("ALQUILERES POR IMPORTE");
 
-    if (!pedirMonto("Importe de referencia", 0.0f, &importe)) {
+    if (!pedirMonto("Importe de referencia", 0.0f, &filtro.importe)) {
         mostrarCancelado();
-        return;
-    }
-
-    printf("\n1. Alquileres con importe SUPERIOR a $%.2f\n", importe);
-    printf("2. Alquileres con importe INFERIOR a $%.2f\n", importe);
-    printf("0. Volver\n");
-
-    opcion = leerOpcion("Seleccione una opcion: ");
-
-    if (opcion == 0) {
-        return;
-    }
-
-    if (opcion != 1 && opcion != 2) {
-        printf("Error: opcion invalida.\n");
-        return;
-    }
-
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
-
-    printf("\n");
-
-    for (i = 0; i < cantidad; i++) {
-        coincide = (opcion == 1) ? alquileres[i].importeTotal > importe
-                                 : alquileres[i].importeTotal < importe;
-
-        if (coincide) {
-            if (encontrados == 0) {
-                imprimirEncabezadoAlquileres();
-            }
-
-            imprimirFilaAlquiler(&alquileres[i]);
-            encontrados++;
-        }
-    }
-
-    if (encontrados == 0) {
-        printf("No hay alquileres que cumplan esa condicion.\n");
     } else {
-        printf("\nAlquileres encontrados: %d\n", encontrados);
+        printf("\n1. Alquileres con importe SUPERIOR a $%.2f\n",
+               filtro.importe);
+        printf("2. Alquileres con importe INFERIOR a $%.2f\n", filtro.importe);
+        printf("0. Volver\n");
+
+        opcion = leerOpcion("Seleccione una opcion: ");
+
+        if (opcion == 1 || opcion == 2) {
+            filtro.mayor = (opcion == 1);
+            printf("\n");
+            listarAlquileresFiltrados(filtroPorImporte, &filtro,
+                                      "No hay alquileres que cumplan esa "
+                                      "condicion.");
+        } else if (opcion != 0) {
+            printf("Error: opcion invalida.\n");
+        }
     }
 }
 
@@ -458,111 +387,102 @@ void alquileresPorImporte(void)
 
 void pagosPorPeriodo(void)
 {
-    Movimiento movimientos[MAX_MOVIMIENTOS];
-    Fecha desde;
-    Fecha hasta;
+    FILE *archivo;
+    Movimiento movimiento;
+    Rango rango;
     double total = 0.0;
-    int cantidad;
-    int i;
     int encontrados = 0;
 
     mostrarTitulo("PAGOS REALIZADOS EN UN PERIODO");
 
-    if (!pedirRangoFechas(&desde, &hasta)) {
+    if (!pedirRangoFechas(&rango.desde, &rango.hasta)) {
         mostrarCancelado();
-        return;
-    }
+    } else {
+        archivo = abrirLectura(ARCHIVO_MOVIMIENTOS);
 
-    cantidad = leerRegistros(ARCHIVO_MOVIMIENTOS, movimientos,
-                             sizeof(Movimiento), MAX_MOVIMIENTOS);
+        if (archivo == NULL) {
+            mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_MOVIMIENTOS);
+        } else {
+            printf("\n");
+            imprimirPeriodo(rango.desde, rango.hasta);
 
-    if (cantidad < 0) {
-        printf("Error: no se pudo leer el archivo de movimientos.\n");
-        return;
-    }
+            while (leerSiguiente(archivo, &movimiento, sizeof(Movimiento))) {
+                if (movimiento.tipo == MOV_PAGO &&
+                    fechaEnRango(movimiento.fecha, rango.desde,
+                                 rango.hasta)) {
+                    if (encontrados == 0) {
+                        imprimirEncabezadoMovimientos();
+                    }
 
-    printf("\n");
-    imprimirPeriodo(desde, hasta);
-
-    for (i = 0; i < cantidad; i++) {
-        if (movimientos[i].tipo == MOV_PAGO &&
-            fechaEnRango(movimientos[i].fecha, desde, hasta)) {
-            if (encontrados == 0) {
-                imprimirEncabezadoMovimientos();
+                    imprimirFilaMovimiento(&movimiento);
+                    total += movimiento.monto;
+                    encontrados++;
+                }
             }
 
-            imprimirFilaMovimiento(&movimientos[i]);
-            total += movimientos[i].monto;
-            encontrados++;
-        }
-    }
+            cerrarArchivo(archivo);
 
-    if (encontrados == 0) {
-        printf("No hay pagos registrados en el periodo indicado.\n");
-    } else {
-        printf("\nPagos encontrados: %d - Total cobrado: $%.2f\n",
-               encontrados, total);
+            if (encontrados == 0) {
+                printf("No hay pagos registrados en el periodo indicado.\n");
+            } else {
+                printf("\nPagos encontrados: %d - Total cobrado: $%.2f\n",
+                       encontrados, total);
+            }
+        }
     }
 }
 
 void clientesConDeuda(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
+    FILE *archivo;
+    Alquiler alquiler;
     Cliente cliente;
     char nombre[80];
     double totalDeuda = 0.0;
     float saldo;
-    int cantidad;
-    int resultado;
-    int i;
     int encontrados = 0;
 
     mostrarTitulo("CLIENTES CON DEUDA");
+    archivo = abrirLectura(ARCHIVO_ALQUILERES);
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
+    if (archivo == NULL) {
+        mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_ALQUILERES);
+    } else {
+        while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            saldo = saldoAlquiler(&alquiler);
 
-    for (i = 0; i < cantidad; i++) {
-        saldo = saldoAlquiler(&alquileres[i]);
+            if (saldo > 0) {
+                if (obtenerCliente(alquiler.dniCliente, &cliente) == ERR_OK) {
+                    snprintf(nombre, sizeof(nombre), "%s", cliente.nombre);
+                } else {
+                    snprintf(nombre, sizeof(nombre),
+                             "(cliente no encontrado)");
+                }
 
-        if (saldo <= 0) {
-            continue;
+                if (encontrados == 0) {
+                    printf("%-9s %-28s %-6s %12s %12s %12s\n", "DNI",
+                           "Nombre", "Alq.", "Total", "Pagado", "Saldo");
+                    printf("-------------------------------------------------"
+                           "-----------------------------\n");
+                }
+
+                printf("%-9s %-28.28s %-6d %12.2f %12.2f %12.2f\n",
+                       alquiler.dniCliente, nombre, alquiler.numero,
+                       alquiler.importeTotal, alquiler.importePagado, saldo);
+
+                totalDeuda += saldo;
+                encontrados++;
+            }
         }
 
-        resultado = obtenerCliente(alquileres[i].dniCliente, &cliente);
-
-        if (resultado < 0) {
-            return;
-        }
-
-        if (resultado == 1) {
-            snprintf(nombre, sizeof(nombre), "%s", cliente.nombre);
-        } else {
-            snprintf(nombre, sizeof(nombre), "(cliente no encontrado)");
-        }
+        cerrarArchivo(archivo);
 
         if (encontrados == 0) {
-            printf("%-9s %-28s %-6s %12s %12s %12s\n", "DNI", "Nombre",
-                   "Alq.", "Total", "Pagado", "Saldo");
-            printf("-----------------------------------------------------"
-                   "-----------------------------\n");
+            printf("No hay clientes con deuda.\n");
+        } else {
+            printf("\nAlquileres con saldo pendiente: %d - Deuda total: "
+                   "$%.2f\n", encontrados, totalDeuda);
         }
-
-        printf("%-9s %-28.28s %-6d %12.2f %12.2f %12.2f\n",
-               alquileres[i].dniCliente, nombre, alquileres[i].numero,
-               alquileres[i].importeTotal, alquileres[i].importePagado,
-               saldo);
-
-        totalDeuda += saldo;
-        encontrados++;
-    }
-
-    if (encontrados == 0) {
-        printf("No hay clientes con deuda.\n");
-    } else {
-        printf("\nAlquileres con saldo pendiente: %d - Deuda total: $%.2f\n",
-               encontrados, totalDeuda);
     }
 }
 
@@ -572,59 +492,75 @@ void clientesConDeuda(void)
 
 void estadisticasEmpresa(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    Vehiculo vehiculos[MAX_VEHICULOS];
+    FILE *archivo;
+    Alquiler alquiler;
+    Vehiculo vehiculo;
     double cobrado = 0.0;
     double pendiente = 0.0;
-    int cantAlquileres;
-    int cantVehiculos;
+    int totalVehiculos = 0;
+    int totalAlquileres = 0;
     int disponibles = 0;
     int alquilados = 0;
     int mantenimiento = 0;
     int baja = 0;
     int activos = 0;
-    int i;
+    int lecturaOk = 1;
 
     mostrarTitulo("ESTADISTICAS DE LA EMPRESA");
 
-    cantVehiculos = leerRegistros(ARCHIVO_VEHICULOS, vehiculos,
-                                  sizeof(Vehiculo), MAX_VEHICULOS);
+    archivo = abrirLectura(ARCHIVO_VEHICULOS);
 
-    if (cantVehiculos < 0) {
-        printf("Error: no se pudo leer el archivo de vehiculos.\n");
-        return;
+    if (archivo == NULL) {
+        mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_VEHICULOS);
+        lecturaOk = 0;
+    } else {
+        while (leerSiguiente(archivo, &vehiculo, sizeof(Vehiculo))) {
+            totalVehiculos++;
+
+            if (vehiculo.estado == VEHICULO_DISPONIBLE) {
+                disponibles++;
+            } else if (vehiculo.estado == VEHICULO_ALQUILADO) {
+                alquilados++;
+            } else if (vehiculo.estado == VEHICULO_MANTENIMIENTO) {
+                mantenimiento++;
+            } else if (vehiculo.estado == VEHICULO_BAJA) {
+                baja++;
+            }
+        }
+
+        cerrarArchivo(archivo);
     }
 
-    if (!cargarAlquileres(alquileres, &cantAlquileres)) {
-        return;
-    }
+    if (lecturaOk) {
+        archivo = abrirLectura(ARCHIVO_ALQUILERES);
 
-    for (i = 0; i < cantVehiculos; i++) {
-        switch (vehiculos[i].estado) {
-            case VEHICULO_DISPONIBLE:    disponibles++;    break;
-            case VEHICULO_ALQUILADO:     alquilados++;     break;
-            case VEHICULO_MANTENIMIENTO: mantenimiento++;  break;
-            case VEHICULO_BAJA:          baja++;           break;
-            default:                                       break;
+        if (archivo == NULL) {
+            mostrarError(ERR_ARCHIVO_ABRIR, ARCHIVO_ALQUILERES);
+            lecturaOk = 0;
+        } else {
+            while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+                totalAlquileres++;
+                cobrado += alquiler.importePagado;
+                pendiente += saldoAlquiler(&alquiler);
+
+                if (alquiler.estado == ALQUILER_ACTIVO) {
+                    activos++;
+                }
+            }
+
+            cerrarArchivo(archivo);
         }
     }
 
-    for (i = 0; i < cantAlquileres; i++) {
-        cobrado += alquileres[i].importePagado;
-        pendiente += saldoAlquiler(&alquileres[i]);
-
-        if (alquileres[i].estado == ALQUILER_ACTIVO) {
-            activos++;
-        }
+    if (lecturaOk) {
+        printf("Cantidad total de vehiculos:        %d\n", totalVehiculos);
+        printf("  Vehiculos disponibles:            %d\n", disponibles);
+        printf("  Vehiculos alquilados:             %d\n", alquilados);
+        printf("  Vehiculos en mantenimiento:       %d\n", mantenimiento);
+        printf("  Vehiculos dados de baja:          %d\n", baja);
+        printf("Cantidad total de alquileres:       %d\n", totalAlquileres);
+        printf("  Alquileres activos:               %d\n", activos);
+        printf("Importe total cobrado:              $%.2f\n", cobrado);
+        printf("Importe total pendiente de cobro:   $%.2f\n", pendiente);
     }
-
-    printf("Cantidad total de vehiculos:        %d\n", cantVehiculos);
-    printf("  Vehiculos disponibles:            %d\n", disponibles);
-    printf("  Vehiculos alquilados:             %d\n", alquilados);
-    printf("  Vehiculos en mantenimiento:       %d\n", mantenimiento);
-    printf("  Vehiculos dados de baja:          %d\n", baja);
-    printf("Cantidad total de alquileres:       %d\n", cantAlquileres);
-    printf("  Alquileres activos:               %d\n", activos);
-    printf("Importe total cobrado:              $%.2f\n", cobrado);
-    printf("Importe total pendiente de cobro:   $%.2f\n", pendiente);
 }
