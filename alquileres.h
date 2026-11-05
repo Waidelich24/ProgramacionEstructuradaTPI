@@ -10,17 +10,21 @@ void modificarAlquiler(void);
 void cancelarAlquiler(void);
 void listarAlquileres(void);
 
-/* Devuelve la posicion del alquiler en el archivo o -1 si no existe / error */
+/* Busca un alquiler por numero. Devuelve la posicion, -1 si no existe y -2 si hay error */
+long buscarAlquiler(int numero, Alquiler *alquiler);
 int buscarAlquilerPorNumero(int numero);
 
-/* Devuelve 1 si el cliente tiene algun alquiler activo, 0 si no y -1 si error */
+/* Devuelve 1 si el cliente tiene un alquiler activo, 0 si no y -1 si hay error */
 int clienteTieneAlquilerActivo(const char dni[]);
 
-/* Saldo pendiente de un alquiler (0 si esta cancelado o totalmente pagado) */
+/* Lo que falta pagar de un alquiler (0 si esta cancelado o pagado) */
 float saldoAlquiler(const Alquiler *alquiler);
 
-/* Tabla comun para mostrar alquileres (listados y consultas) */
-void imprimirEncabezadoAlquileres(void);
-void imprimirFilaAlquiler(const Alquiler *alquiler);
+/* Controla que la fecha de la maquina no sea anterior al inicio del alquiler.
+   Devuelve 1 si esta bien y 0 (con un mensaje) si no. */
+int fechaMaquinaCorrecta(const Alquiler *alquiler, Fecha hoy);
+
+void mostrarTablaAlquileres(void);
+void mostrarFilaAlquiler(const Alquiler *alquiler);
 
 #endif

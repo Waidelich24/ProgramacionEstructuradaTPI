@@ -3,14 +3,13 @@
 
 #include "estructuras.h"
 
-/* Devuelve la posicion del vehiculo en el archivo o -1 si no existe / error */
+/* Devuelve la posicion del vehiculo en el archivo, -1 si no existe y -2 si hay error */
 int buscarVehiculoPorPatente(const char patente[]);
 
-/* Carga el vehiculo en *vehiculo. Devuelve 1 si existe, 0 si no existe
-   y -1 si el archivo no pudo leerse. */
+/* Carga el vehiculo. Devuelve 1 si existe, 0 si no existe y -1 si no se pudo abrir el archivo */
 int obtenerVehiculo(const char patente[], Vehiculo *vehiculo);
 
-/* Cambia el estado de un vehiculo y lo guarda. Devuelve 1 si tuvo exito. */
+/* Cambia el estado del vehiculo directamente en el archivo. Devuelve 1 si salio bien */
 int actualizarEstadoVehiculo(const char patente[], EstadoVehiculo estado);
 
 void menuVehiculos(void);
@@ -19,7 +18,7 @@ void listarVehiculos(void);
 void consultarVehiculo(void);
 void modificarVehiculo(void);
 
-/* Lista los disponibles. Devuelve la cantidad mostrada o -1 si hubo error. */
+/* Muestra los disponibles y devuelve cuantos son (-1 si hay error) */
 int listarVehiculosDisponibles(void);
 
 #endif

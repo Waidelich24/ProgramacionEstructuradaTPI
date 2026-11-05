@@ -3,11 +3,10 @@
 
 #include "estructuras.h"
 
-/* Devuelve la posicion del cliente en el archivo o -1 si no existe / error */
+/* Devuelve la posicion del cliente en el archivo, -1 si no existe y -2 si hay error */
 int buscarClientePorDNI(const char dni[]);
 
-/* Carga el cliente en *cliente. Devuelve 1 si existe, 0 si no existe
-   y -1 si el archivo no pudo leerse. */
+/* Carga el cliente. Devuelve 1 si existe, 0 si no existe y -1 si no se pudo abrir el archivo */
 int obtenerCliente(const char dni[], Cliente *cliente);
 
 void menuClientes(void);

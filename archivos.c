@@ -6,139 +6,137 @@
 
 #ifdef _WIN32
 #include <direct.h>
-#define CREAR_DIRECTORIO(ruta) _mkdir(ruta)
+#define CREAR_CARPETA(ruta) _mkdir(ruta)
 #else
 #include <sys/stat.h>
 #include <sys/types.h>
-#define CREAR_DIRECTORIO(ruta) mkdir(ruta, 0755)
+#define CREAR_CARPETA(ruta) mkdir(ruta, 0755)
 #endif
 
 #include "archivos.h"
 
-/* Crea el archivo vacio si no existe y comprueba que se pueda abrir */
-static int asegurarArchivo(const char *ruta)
+/* Abre el archivo (lo crea si no existe) para comprobar que se puede usar */
+int comprobarArchivo(const char *ruta)
 {
     FILE *archivo = fopen(ruta, "ab");
+    int ok = 0;
 
     if (archivo == NULL) {
-        printf("Error: no se puede abrir ni crear el archivo '%s'.\n", ruta);
-        return 0;
+        printf("Error: no se puede abrir ni crear el archivo %s\n", ruta);
+    } else {
+        fclose(archivo);
+        ok = 1;
     }
 
-    fclose(archivo);
-    return 1;
+    return ok;
 }
 
 int inicializarArchivos(void)
 {
-    /* Si el directorio ya existe, mkdir falla y no es un problema:
-       la verificacion real es abrir cada archivo. */
-    CREAR_DIRECTORIO(DIRECTORIO_DATOS);
+    int ok;
 
-    return asegurarArchivo(ARCHIVO_CLIENTES) &&
-           asegurarArchivo(ARCHIVO_VEHICULOS) &&
-           asegurarArchivo(ARCHIVO_ALQUILERES) &&
-           asegurarArchivo(ARCHIVO_MOVIMIENTOS);
+    CREAR_CARPETA(DIRECTORIO_DATOS);
+
+    ok = comprobarArchivo(ARCHIVO_CLIENTES);
+    ok = comprobarArchivo(ARCHIVO_VEHICULOS) && ok;
+    ok = comprobarArchivo(ARCHIVO_ALQUILERES) && ok;
+    ok = comprobarArchivo(ARCHIVO_MOVIMIENTOS) && ok;
+
+    return ok;
 }
 
-int leerRegistros(const char *ruta, void *registros,
-                  size_t tamRegistro, int capacidad)
+long contarRegistros(const char *ruta, size_t tamano)
 {
-    FILE *archivo;
+    FILE *archivo = fopen(ruta, "rb");
+    long cantidad = -1;
     long bytes;
-    long total;
-    int cantidad;
 
-    if (capacidad <= 0 || tamRegistro == 0) {
-        return -1;
-    }
-
-    archivo = fopen(ruta, "rb");
-
-    if (archivo == NULL) {
-        return -1;
-    }
-
-    if (fseek(archivo, 0L, SEEK_END) != 0) {
+    if (archivo != NULL) {
+        fseek(archivo, 0, SEEK_END);
+        bytes = ftell(archivo);
+        cantidad = bytes / (long)tamano;
         fclose(archivo);
-        return -1;
     }
 
-    bytes = ftell(archivo);
-
-    if (bytes < 0 || fseek(archivo, 0L, SEEK_SET) != 0) {
-        fclose(archivo);
-        return -1;
-    }
-
-    /* Archivo danado o con mas registros de los que caben en memoria */
-    if ((size_t)bytes % tamRegistro != 0) {
-        fclose(archivo);
-        return -1;
-    }
-
-    total = (long)((size_t)bytes / tamRegistro);
-
-    if (total > capacidad) {
-        fclose(archivo);
-        return -1;
-    }
-
-    cantidad = (int)fread(registros, tamRegistro, (size_t)total, archivo);
-
-    if (ferror(archivo) || cantidad != (int)total) {
-        fclose(archivo);
-        return -1;
-    }
-
-    fclose(archivo);
     return cantidad;
 }
 
-int guardarRegistros(const char *ruta, const void *registros,
-                     size_t tamRegistro, int cantidad)
+int leerRegistroEn(const char *ruta, void *registro, size_t tamano, long pos)
 {
-    FILE *archivo;
-    size_t escritos;
+    FILE *archivo = fopen(ruta, "rb");
+    int ok = 0;
 
-    if (cantidad < 0) {
-        return 0;
+    if (archivo != NULL) {
+        fseek(archivo, pos * (long)tamano, SEEK_SET);
+
+        if (fread(registro, tamano, 1, archivo) == 1) {
+            ok = 1;
+        }
+
+        fclose(archivo);
     }
 
-    archivo = fopen(ruta, "wb");
-
-    if (archivo == NULL) {
-        return 0;
-    }
-
-    escritos = 0;
-
-    if (cantidad > 0) {
-        escritos = fwrite(registros, tamRegistro, (size_t)cantidad, archivo);
-    }
-
-    if (fclose(archivo) != 0) {
-        return 0;
-    }
-
-    return escritos == (size_t)cantidad;
+    return ok;
 }
 
-int agregarRegistro(const char *ruta, const void *registro,
-                    size_t tamRegistro)
+int escribirRegistroEn(const char *ruta, const void *registro, size_t tamano, long pos)
+{
+    FILE *archivo = fopen(ruta, "r+b");
+    int ok = 0;
+
+    if (archivo != NULL) {
+        fseek(archivo, pos * (long)tamano, SEEK_SET);
+
+        if (fwrite(registro, tamano, 1, archivo) == 1) {
+            ok = 1;
+        }
+
+        fclose(archivo);
+    }
+
+    return ok;
+}
+
+int agregarRegistro(const char *ruta, const void *registro, size_t tamano)
 {
     FILE *archivo = fopen(ruta, "ab");
-    size_t escritos;
+    int ok = 0;
 
-    if (archivo == NULL) {
-        return 0;
+    if (archivo != NULL) {
+        if (fwrite(registro, tamano, 1, archivo) == 1) {
+            ok = 1;
+        }
+
+        fclose(archivo);
     }
 
-    escritos = fwrite(registro, tamRegistro, 1, archivo);
+    return ok;
+}
 
-    if (fclose(archivo) != 0) {
-        return 0;
+int vaciarArchivo(const char *ruta)
+{
+    FILE *archivo = fopen(ruta, "wb");
+    int ok = 0;
+
+    if (archivo != NULL) {
+        fclose(archivo);
+        ok = 1;
     }
 
-    return escritos == 1;
+    return ok;
+}
+
+FILE *abrirLectura(const char *ruta)
+{
+    return fopen(ruta, "rb");
+}
+
+int leerSiguiente(FILE *archivo, void *registro, size_t tamano)
+{
+    return fread(registro, tamano, 1, archivo) == 1;
+}
+
+void cerrarArchivo(FILE *archivo)
+{
+    fclose(archivo);
 }

@@ -1,17 +1,9 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <errno.h>
 #include <time.h>
 
 #include "utiles.h"
-
-#define TAM_LINEA 256
-
-/* =========================================================
-   PRESENTACION
-   ========================================================= */
 
 void mostrarTitulo(const char *titulo)
 {
@@ -25,451 +17,333 @@ void mostrarCancelado(void)
     printf("Operacion cancelada. No se guardaron cambios.\n");
 }
 
-/* =========================================================
-   ENTRADA POR TECLADO
-   ========================================================= */
+/* ---------- Lectura por teclado ---------- */
 
-/* Elimina espacios al inicio y al final */
-static void recortar(char texto[])
-{
-    size_t inicio = 0;
-    size_t fin = strlen(texto);
-
-    while (fin > 0 && isspace((unsigned char)texto[fin - 1])) {
-        fin--;
-    }
-
-    texto[fin] = '\0';
-
-    while (texto[inicio] != '\0' &&
-           isspace((unsigned char)texto[inicio])) {
-        inicio++;
-    }
-
-    if (inicio > 0) {
-        memmove(texto, texto + inicio, strlen(texto + inicio) + 1);
-    }
-}
-
-/* Lee una linea completa. Devuelve 0 si se llego al fin de la entrada. */
+/* Lee una linea. Devuelve 0 si ya no hay mas datos para leer */
 int leerLinea(const char *mensaje, char texto[], int tam)
 {
-    size_t largo;
+    int leido = 0;
+    int largo;
     int c;
 
-    if (mensaje != NULL) {
-        printf("%s", mensaje);
-        fflush(stdout);
-    }
+    printf("%s", mensaje);
 
-    if (fgets(texto, tam, stdin) == NULL) {
-        texto[0] = '\0';
-        return 0;
-    }
+    if (fgets(texto, tam, stdin) != NULL) {
+        leido = 1;
+        largo = strlen(texto);
 
-    largo = strlen(texto);
-
-    if (largo > 0 && texto[largo - 1] == '\n') {
-        texto[largo - 1] = '\0';
-    } else {
-        /* Linea mas larga que el buffer: se descarta el resto */
-        while ((c = getchar()) != '\n' && c != EOF) {
+        if (largo > 0 && texto[largo - 1] == '\n') {
+            texto[largo - 1] = '\0';
+        } else {
+            /* la linea era mas larga que el texto: se descarta el resto */
+            while ((c = getchar()) != '\n' && c != EOF) {
+            }
         }
+    } else {
+        texto[0] = '\0';
     }
 
-    recortar(texto);
-    return 1;
+    return leido;
 }
 
-/* Convierte un texto a entero verificando que sea todo numerico */
-static int parsearEntero(const char *texto, long *valor)
-{
-    char *fin;
-    long numero;
-
-    if (texto[0] == '\0') {
-        return 0;
-    }
-
-    errno = 0;
-    numero = strtol(texto, &fin, 10);
-
-    if (errno != 0 || *fin != '\0') {
-        return 0;
-    }
-
-    *valor = numero;
-    return 1;
-}
-
+/* Devuelve la opcion elegida, -1 si no es un numero y 0 si no hay mas datos */
 int leerOpcion(const char *mensaje)
 {
-    char texto[TAM_LINEA];
-    long numero;
+    char texto[100];
+    char resto;
+    int numero;
+    int opcion = -1;
 
-    if (!leerLinea(mensaje, texto, sizeof(texto))) {
-        return 0;
+    if (!leerLinea(mensaje, texto, 100)) {
+        opcion = 0;
+    } else if (sscanf(texto, "%d%c", &numero, &resto) == 1 && numero >= 0) {
+        opcion = numero;
     }
 
-    if (!parsearEntero(texto, &numero) || numero < 0 || numero > 1000) {
-        return -1;
-    }
-
-    return (int)numero;
+    return opcion;
 }
 
 int confirmar(const char *mensaje)
 {
-    char prompt[200];
-    char texto[TAM_LINEA];
-    char primera;
+    char texto[100];
+    char mensajeCompleto[150];
+    int respuesta = -1;
 
-    snprintf(prompt, sizeof(prompt), "%s (S/N): ", mensaje);
+    sprintf(mensajeCompleto, "%s (S/N): ", mensaje);
 
-    while (leerLinea(prompt, texto, sizeof(texto))) {
-        primera = (char)toupper((unsigned char)texto[0]);
-
-        if (texto[0] != '\0' && (texto[1] == '\0' ||
-            (texto[2] == '\0' && (primera == 'S' || primera == 'N')))) {
-            if (primera == 'S') {
-                return 1;
-            }
-
-            if (primera == 'N') {
-                return 0;
-            }
+    while (respuesta == -1 && leerLinea(mensajeCompleto, texto, 100)) {
+        if (strlen(texto) == 1 && (texto[0] == 's' || texto[0] == 'S')) {
+            respuesta = 1;
+        } else if (strlen(texto) == 1 && (texto[0] == 'n' || texto[0] == 'N')) {
+            respuesta = 0;
+        } else {
+            printf("Error: responda S o N.\n");
         }
-
-        printf("Error: responda S (si) o N (no).\n");
     }
 
-    return 0;
+    return respuesta == 1;
 }
 
 int pedirTexto(const char *mensaje, char texto[], int tam)
 {
-    char prompt[200];
+    char mensajeCompleto[150];
+    int valido = 0;
+    int cancelado = 0;
 
-    snprintf(prompt, sizeof(prompt), "%s (0 para cancelar): ", mensaje);
+    sprintf(mensajeCompleto, "%s (0 para cancelar): ", mensaje);
 
-    while (leerLinea(prompt, texto, tam)) {
+    while (!valido && !cancelado && leerLinea(mensajeCompleto, texto, tam)) {
         if (strcmp(texto, "0") == 0) {
-            return 0;
+            cancelado = 1;
+        } else if (strlen(texto) == 0) {
+            printf("Error: no puede quedar vacio.\n");
+        } else {
+            valido = 1;
         }
-
-        if (texto[0] == '\0') {
-            printf("Error: el campo no puede quedar vacio.\n");
-            continue;
-        }
-
-        return 1;
     }
 
-    return 0;
-}
-
-int pedirCampo(const char *mensaje, char destino[], int tam,
-               int (*validar)(const char *), const char *mensajeError)
-{
-    char temporal[TAM_LINEA];
-
-    while (pedirTexto(mensaje, temporal, sizeof(temporal))) {
-        if ((int)strlen(temporal) >= tam) {
-            printf("Error: el texto no puede superar los %d caracteres.\n",
-                   tam - 1);
-            continue;
-        }
-
-        if (validar != NULL && !validar(temporal)) {
-            printf("Error: %s\n", mensajeError);
-            continue;
-        }
-
-        strcpy(destino, temporal);
-        return 1;
-    }
-
-    return 0;
+    return valido;
 }
 
 int pedirEntero(const char *mensaje, int min, int max, int *valor)
 {
-    char prompt[200];
-    char texto[TAM_LINEA];
-    long numero;
+    char texto[100];
+    char mensajeCompleto[150];
+    char resto;
+    int numero;
+    int valido = 0;
+    int cancelado = 0;
 
-    snprintf(prompt, sizeof(prompt), "%s (%d-%d, 0 para cancelar): ",
-             mensaje, min, max);
+    sprintf(mensajeCompleto, "%s (%d a %d, 0 para cancelar): ", mensaje, min, max);
 
-    while (leerLinea(prompt, texto, sizeof(texto))) {
-        if (!parsearEntero(texto, &numero)) {
+    while (!valido && !cancelado && leerLinea(mensajeCompleto, texto, 100)) {
+        if (sscanf(texto, "%d%c", &numero, &resto) != 1) {
             printf("Error: debe ingresar un numero entero.\n");
-            continue;
+        } else if (numero == 0) {
+            cancelado = 1;
+        } else if (numero < min || numero > max) {
+            printf("Error: el numero debe estar entre %d y %d.\n", min, max);
+        } else {
+            *valor = numero;
+            valido = 1;
         }
-
-        if (numero == 0) {
-            return 0;
-        }
-
-        if (numero < min || numero > max) {
-            printf("Error: el valor debe estar entre %d y %d.\n", min, max);
-            continue;
-        }
-
-        *valor = (int)numero;
-        return 1;
     }
 
-    return 0;
+    return valido;
 }
 
+/* Pide un importe mayor a cero. Si maximo es mayor a 0, el importe no puede superarlo */
 int pedirMonto(const char *mensaje, float maximo, float *valor)
 {
-    char prompt[200];
-    char texto[TAM_LINEA];
-    char *fin;
-    double numero;
+    char texto[100];
+    char mensajeCompleto[150];
+    char resto;
+    float numero;
     int i;
+    int valido = 0;
+    int cancelado = 0;
 
-    snprintf(prompt, sizeof(prompt), "%s (0 para cancelar): $", mensaje);
+    sprintf(mensajeCompleto, "%s (0 para cancelar): $", mensaje);
 
-    while (leerLinea(prompt, texto, sizeof(texto))) {
-        /* Se acepta la coma como separador decimal */
+    while (!valido && !cancelado && leerLinea(mensajeCompleto, texto, 100)) {
+        /* se acepta la coma como separador decimal */
         for (i = 0; texto[i] != '\0'; i++) {
             if (texto[i] == ',') {
                 texto[i] = '.';
             }
         }
 
-        if (texto[0] == '\0') {
-            printf("Error: debe ingresar un importe.\n");
-            continue;
-        }
-
-        errno = 0;
-        numero = strtod(texto, &fin);
-
-        if (*fin != '\0' || errno != 0 || numero != numero) {
-            printf("Error: el importe debe ser un numero.\n");
-            continue;
-        }
-
-        if (numero == 0) {
-            return 0;
-        }
-
-        if (numero < 0) {
+        if (sscanf(texto, "%f%c", &numero, &resto) != 1) {
+            printf("Error: debe ingresar un importe numerico.\n");
+        } else if (numero == 0) {
+            cancelado = 1;
+        } else if (numero < 0) {
             printf("Error: el importe debe ser mayor que cero.\n");
-            continue;
+        } else if (maximo > 0 && numero > maximo + 0.005) {
+            printf("Error: el importe no puede superar $%.2f\n", maximo);
+        } else {
+            *valor = numero;
+            valido = 1;
         }
-
-        if (numero > 100000000.0) {
-            printf("Error: el importe ingresado es demasiado grande.\n");
-            continue;
-        }
-
-        if (maximo > 0 && numero > (double)maximo + 0.005) {
-            printf("Error: el importe no puede superar $%.2f.\n", maximo);
-            continue;
-        }
-
-        *valor = (float)numero;
-
-        if (maximo > 0 && *valor > maximo) {
-            *valor = maximo;
-        }
-
-        return 1;
     }
 
-    return 0;
+    return valido;
 }
 
 int pedirDNI(char dni[])
 {
-    char texto[TAM_LINEA];
+    char texto[100];
     int largo;
     int i;
-    int valido;
+    int soloNumeros;
+    int valido = 0;
 
-    while (pedirTexto("DNI (7 u 8 digitos)", texto, sizeof(texto))) {
-        largo = (int)strlen(texto);
-        valido = (largo == 7 || largo == 8);
+    while (!valido && pedirTexto("DNI (7 u 8 numeros)", texto, 100)) {
+        largo = strlen(texto);
+        soloNumeros = 1;
 
-        for (i = 0; valido && texto[i] != '\0'; i++) {
+        for (i = 0; i < largo; i++) {
             if (!isdigit((unsigned char)texto[i])) {
-                valido = 0;
+                soloNumeros = 0;
             }
         }
 
-        if (valido) {
+        if (soloNumeros && (largo == 7 || largo == 8)) {
             strcpy(dni, texto);
-            return 1;
+            valido = 1;
+        } else {
+            printf("Error: el DNI debe tener 7 u 8 numeros.\n");
         }
-
-        printf("Error: el DNI debe tener 7 u 8 digitos numericos.\n");
     }
 
-    return 0;
+    return valido;
 }
 
-/* ---------- Patentes ---------- */
-
-/* L = letra, N = digito */
-static int coincidePatron(const char *texto, const char *patron)
-{
-    size_t i;
-
-    if (strlen(texto) != strlen(patron)) {
-        return 0;
-    }
-
-    for (i = 0; patron[i] != '\0'; i++) {
-        if (patron[i] == 'L' && !isalpha((unsigned char)texto[i])) {
-            return 0;
-        }
-
-        if (patron[i] == 'N' && !isdigit((unsigned char)texto[i])) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-/* Formato anterior (ABC123) o Mercosur (AB123CD) */
+/* Formato viejo: ABC123. Formato nuevo: AB123CD */
 int patenteValida(const char *patente)
 {
-    return coincidePatron(patente, "LLLNNN") ||
-           coincidePatron(patente, "LLNNNLL");
-}
-
-static void aMayusculas(char texto[])
-{
+    int largo = strlen(patente);
     int i;
+    int valida = 0;
 
-    for (i = 0; texto[i] != '\0'; i++) {
-        texto[i] = (char)toupper((unsigned char)texto[i]);
+    if (largo == 6) {
+        valida = 1;
+
+        for (i = 0; i < 3; i++) {
+            if (!isalpha((unsigned char)patente[i])) {
+                valida = 0;
+            }
+        }
+
+        for (i = 3; i < 6; i++) {
+            if (!isdigit((unsigned char)patente[i])) {
+                valida = 0;
+            }
+        }
+    } else if (largo == 7) {
+        valida = 1;
+
+        for (i = 0; i < 2; i++) {
+            if (!isalpha((unsigned char)patente[i])) {
+                valida = 0;
+            }
+        }
+
+        for (i = 2; i < 5; i++) {
+            if (!isdigit((unsigned char)patente[i])) {
+                valida = 0;
+            }
+        }
+
+        for (i = 5; i < 7; i++) {
+            if (!isalpha((unsigned char)patente[i])) {
+                valida = 0;
+            }
+        }
     }
+
+    return valida;
 }
 
 int pedirPatente(char patente[])
 {
-    char texto[TAM_LINEA];
+    char texto[100];
+    int i;
+    int valido = 0;
 
-    while (pedirTexto("Patente (ABC123 o AB123CD)", texto, sizeof(texto))) {
-        aMayusculas(texto);
+    while (!valido && pedirTexto("Patente (ABC123 o AB123CD)", texto, 100)) {
+        for (i = 0; texto[i] != '\0'; i++) {
+            texto[i] = toupper((unsigned char)texto[i]);
+        }
 
         if (patenteValida(texto)) {
             strcpy(patente, texto);
-            return 1;
+            valido = 1;
+        } else {
+            printf("Error: patente invalida. Use ABC123 o AB123CD.\n");
         }
-
-        printf("Error: formato de patente invalido. "
-               "Use ABC123 o AB123CD.\n");
     }
 
-    return 0;
+    return valido;
 }
 
-/* =========================================================
-   FECHAS
-   ========================================================= */
+/* ---------- Fechas ---------- */
 
 Fecha fechaActual(void)
 {
     Fecha fecha;
     time_t ahora = time(NULL);
-    struct tm *actual = localtime(&ahora);
+    struct tm *hoy = localtime(&ahora);
 
-    if (actual != NULL) {
-        fecha.dia = actual->tm_mday;
-        fecha.mes = actual->tm_mon + 1;
-        fecha.anio = actual->tm_year + 1900;
-    } else {
-        fecha.dia = 1;
-        fecha.mes = 1;
-        fecha.anio = ANIO_MINIMO;
-    }
+    fecha.dia = hoy->tm_mday;
+    fecha.mes = hoy->tm_mon + 1;
+    fecha.anio = hoy->tm_year + 1900;
 
     return fecha;
+}
+
+int esBisiesto(int anio)
+{
+    return (anio % 4 == 0 && anio % 100 != 0) || anio % 400 == 0;
+}
+
+int diasDelMes(int mes, int anio)
+{
+    int dias = 31;
+
+    if (mes == 4 || mes == 6 || mes == 9 || mes == 11) {
+        dias = 30;
+    } else if (mes == 2) {
+        dias = esBisiesto(anio) ? 29 : 28;
+    }
+
+    return dias;
 }
 
 int fechaValida(Fecha fecha)
 {
-    int diasMes;
-    int bisiesto;
+    int valida = 0;
 
-    if (fecha.anio < ANIO_MINIMO || fecha.anio > ANIO_MAXIMO ||
-        fecha.mes < 1 || fecha.mes > 12 || fecha.dia < 1) {
-        return 0;
+    if (fecha.anio >= 1900 && fecha.anio <= 2100 && fecha.mes >= 1 &&
+        fecha.mes <= 12 && fecha.dia >= 1 &&
+        fecha.dia <= diasDelMes(fecha.mes, fecha.anio)) {
+        valida = 1;
     }
 
-    bisiesto = (fecha.anio % 400 == 0) ||
-               (fecha.anio % 4 == 0 && fecha.anio % 100 != 0);
-
-    if (fecha.mes == 2) {
-        diasMes = bisiesto ? 29 : 28;
-    } else if (fecha.mes == 4 || fecha.mes == 6 ||
-               fecha.mes == 9 || fecha.mes == 11) {
-        diasMes = 30;
-    } else {
-        diasMes = 31;
-    }
-
-    return fecha.dia <= diasMes;
+    return valida;
 }
 
-/* Cantidad de dias desde el 01/01/1970 (calendario gregoriano) */
+/* Cantidad de dias desde el 01/01/1900. Sirve para comparar y restar fechas */
 long fechaADias(Fecha fecha)
 {
-    long anio = fecha.anio;
-    long mes = fecha.mes;
-    long era, anioEra, diaAnio, diaEra;
+    long dias = 0;
+    int anio;
+    int mes;
 
-    if (mes <= 2) {
-        anio--;
+    for (anio = 1900; anio < fecha.anio; anio++) {
+        dias += esBisiesto(anio) ? 366 : 365;
     }
 
-    era = (anio >= 0 ? anio : anio - 399) / 400;
-    anioEra = anio - era * 400;
-    diaAnio = (153 * (mes + (mes > 2 ? -3 : 9)) + 2) / 5 + fecha.dia - 1;
-    diaEra = anioEra * 365 + anioEra / 4 - anioEra / 100 + diaAnio;
+    for (mes = 1; mes < fecha.mes; mes++) {
+        dias += diasDelMes(mes, fecha.anio);
+    }
 
-    return era * 146097 + diaEra - 719468;
-}
-
-Fecha diasAFecha(long dias)
-{
-    Fecha fecha;
-    long era, diaEra, anioEra, anio, diaAnio, mp;
-
-    dias += 719468;
-    era = (dias >= 0 ? dias : dias - 146096) / 146097;
-    diaEra = dias - era * 146097;
-    anioEra = (diaEra - diaEra / 1460 + diaEra / 36524 -
-               diaEra / 146096) / 365;
-    anio = anioEra + era * 400;
-    diaAnio = diaEra - (365 * anioEra + anioEra / 4 - anioEra / 100);
-    mp = (5 * diaAnio + 2) / 153;
-
-    fecha.dia = (int)(diaAnio - (153 * mp + 2) / 5 + 1);
-    fecha.mes = (int)(mp < 10 ? mp + 3 : mp - 9);
-    fecha.anio = (int)(anio + (fecha.mes <= 2 ? 1 : 0));
-
-    return fecha;
+    return dias + fecha.dia;
 }
 
 int compararFechas(Fecha a, Fecha b)
 {
-    long da = fechaADias(a);
-    long db = fechaADias(b);
+    long diasA = fechaADias(a);
+    long diasB = fechaADias(b);
+    int resultado = 0;
 
-    if (da < db) {
-        return -1;
+    if (diasA < diasB) {
+        resultado = -1;
+    } else if (diasA > diasB) {
+        resultado = 1;
     }
 
-    return da > db ? 1 : 0;
+    return resultado;
 }
 
 int diasEntre(Fecha desde, Fecha hasta)
@@ -477,9 +351,26 @@ int diasEntre(Fecha desde, Fecha hasta)
     return (int)(fechaADias(hasta) - fechaADias(desde));
 }
 
+/* Suma dias de a uno (dias tiene que ser positivo) */
 Fecha sumarDias(Fecha fecha, int dias)
 {
-    return diasAFecha(fechaADias(fecha) + dias);
+    while (dias > 0) {
+        fecha.dia++;
+
+        if (fecha.dia > diasDelMes(fecha.mes, fecha.anio)) {
+            fecha.dia = 1;
+            fecha.mes++;
+
+            if (fecha.mes > 12) {
+                fecha.mes = 1;
+                fecha.anio++;
+            }
+        }
+
+        dias--;
+    }
+
+    return fecha;
 }
 
 void imprimirFecha(Fecha fecha)
@@ -491,89 +382,85 @@ void imprimirFecha(Fecha fecha)
     }
 }
 
+/* Pide una fecha (solo para las consultas por periodo) */
 int pedirFecha(const char *titulo, Fecha *fecha)
 {
     Fecha leida;
+    int valida = 0;
+    int cancelado = 0;
 
     printf("%s\n", titulo);
 
-    while (1) {
+    while (!valida && !cancelado) {
         if (!pedirEntero("  Dia", 1, 31, &leida.dia)) {
-            return 0;
-        }
-
-        if (!pedirEntero("  Mes", 1, 12, &leida.mes)) {
-            return 0;
-        }
-
-        if (!pedirEntero("  Anio", ANIO_MINIMO, ANIO_MAXIMO, &leida.anio)) {
-            return 0;
-        }
-
-        if (fechaValida(leida)) {
+            cancelado = 1;
+        } else if (!pedirEntero("  Mes", 1, 12, &leida.mes)) {
+            cancelado = 1;
+        } else if (!pedirEntero("  Anio", 1900, 2100, &leida.anio)) {
+            cancelado = 1;
+        } else if (fechaValida(leida)) {
             *fecha = leida;
-            return 1;
+            valida = 1;
+        } else {
+            printf("Error: esa fecha no existe.\n");
         }
-
-        printf("Error: la fecha %02d/%02d/%04d no existe en el calendario.\n",
-               leida.dia, leida.mes, leida.anio);
-    }
-}
-
-/* Ofrece usar la fecha del sistema o ingresar otra */
-int pedirFechaOperacion(const char *titulo, Fecha *fecha)
-{
-    Fecha hoy = fechaActual();
-
-    printf("%s - fecha actual: ", titulo);
-    imprimirFecha(hoy);
-    printf("\n");
-
-    if (confirmar("Usar la fecha actual")) {
-        *fecha = hoy;
-        return 1;
     }
 
-    return pedirFecha("Ingrese la fecha de la operacion", fecha);
+    return valida;
 }
 
-/* =========================================================
-   TEXTOS DE ESTADOS
-   ========================================================= */
+/* ---------- Textos ---------- */
 
 const char *textoEstadoCliente(EstadoCliente estado)
 {
-    return estado == CLIENTE_ACTIVO ? "Activo" : "Inactivo";
+    const char *texto = "Inactivo";
+
+    if (estado == CLIENTE_ACTIVO) {
+        texto = "Activo";
+    }
+
+    return texto;
 }
 
 const char *textoEstadoVehiculo(EstadoVehiculo estado)
 {
-    switch (estado) {
-        case VEHICULO_DISPONIBLE:    return "Disponible";
-        case VEHICULO_ALQUILADO:     return "Alquilado";
-        case VEHICULO_MANTENIMIENTO: return "En mantenimiento";
-        case VEHICULO_BAJA:          return "Baja";
-        default:                     return "Desconocido";
+    const char *texto = "Disponible";
+
+    if (estado == VEHICULO_ALQUILADO) {
+        texto = "Alquilado";
+    } else if (estado == VEHICULO_MANTENIMIENTO) {
+        texto = "En mantenimiento";
+    } else if (estado == VEHICULO_BAJA) {
+        texto = "Baja";
     }
+
+    return texto;
 }
 
 const char *textoEstadoAlquiler(EstadoAlquiler estado)
 {
-    switch (estado) {
-        case ALQUILER_ACTIVO:     return "Activo";
-        case ALQUILER_FINALIZADO: return "Finalizado";
-        case ALQUILER_CANCELADO:  return "Cancelado";
-        default:                  return "Desconocido";
+    const char *texto = "Activo";
+
+    if (estado == ALQUILER_FINALIZADO) {
+        texto = "Finalizado";
+    } else if (estado == ALQUILER_CANCELADO) {
+        texto = "Cancelado";
     }
+
+    return texto;
 }
 
 const char *textoTipoMovimiento(TipoMovimiento tipo)
 {
-    switch (tipo) {
-        case MOV_ALQUILER:   return "Alquiler";
-        case MOV_PAGO:       return "Pago";
-        case MOV_DEVOLUCION: return "Devolucion";
-        case MOV_AJUSTE:     return "Ajuste";
-        default:             return "Desconocido";
+    const char *texto = "Alquiler";
+
+    if (tipo == MOV_PAGO) {
+        texto = "Pago";
+    } else if (tipo == MOV_DEVOLUCION) {
+        texto = "Devolucion";
+    } else if (tipo == MOV_AJUSTE) {
+        texto = "Ajuste";
     }
+
+    return texto;
 }

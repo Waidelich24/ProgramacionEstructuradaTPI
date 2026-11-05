@@ -8,136 +8,152 @@
 #include "movimientos.h"
 #include "utiles.h"
 
-#define MAX_DIAS_ALQUILER 365
-#define TOLERANCIA        0.005f
+/* ---------- Archivo ---------- */
 
-/* =========================================================
-   ACCESO A ARCHIVO
-   ========================================================= */
-
-static int cargarAlquileres(Alquiler alquileres[], int *cantidad)
+long buscarAlquiler(int numero, Alquiler *encontrado)
 {
-    int resultado = leerRegistros(ARCHIVO_ALQUILERES, alquileres,
-                                  sizeof(Alquiler), MAX_ALQUILERES);
+    FILE *archivo = abrirLectura(ARCHIVO_ALQUILERES);
+    Alquiler alquiler;
+    long pos = -1;
+    long i = 0;
 
-    if (resultado < 0) {
-        printf("Error: no se pudo leer el archivo de alquileres (%s).\n",
-               ARCHIVO_ALQUILERES);
-        return 0;
-    }
-
-    *cantidad = resultado;
-    return 1;
-}
-
-static int guardarAlquileres(const Alquiler alquileres[], int cantidad)
-{
-    if (!guardarRegistros(ARCHIVO_ALQUILERES, alquileres,
-                          sizeof(Alquiler), cantidad)) {
-        printf("Error: no se pudo guardar el archivo de alquileres.\n");
-        return 0;
-    }
-
-    return 1;
-}
-
-static int indiceAlquiler(const Alquiler alquileres[], int cantidad,
-                          int numero)
-{
-    int i;
-
-    for (i = 0; i < cantidad; i++) {
-        if (alquileres[i].numero == numero) {
-            return i;
+    if (archivo == NULL) {
+        pos = -2;
+    } else {
+        while (pos == -1 && leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            if (alquiler.numero == numero) {
+                pos = i;
+                *encontrado = alquiler;
+            }
+            i++;
         }
+        cerrarArchivo(archivo);
     }
 
-    return -1;
-}
-
-static int nuevoNumero(const Alquiler alquileres[], int cantidad)
-{
-    int i;
-    int mayor = 0;
-
-    for (i = 0; i < cantidad; i++) {
-        if (alquileres[i].numero > mayor) {
-            mayor = alquileres[i].numero;
-        }
-    }
-
-    return mayor + 1;
+    return pos;
 }
 
 int buscarAlquilerPorNumero(int numero)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    int cantidad;
+    Alquiler alquiler;
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return -1;
+    return (int)buscarAlquiler(numero, &alquiler);
+}
+
+/* El numero nuevo es el del ultimo alquiler del archivo mas uno.
+   Devuelve 1 si pudo calcularlo */
+static int proximoNumero(int *numero)
+{
+    long cantidad = contarRegistros(ARCHIVO_ALQUILERES, sizeof(Alquiler));
+    Alquiler ultimo;
+    int ok = 1;
+
+    if (cantidad < 0) {
+        printf("Error: no se pudo abrir el archivo de alquileres.\n");
+        ok = 0;
+    } else if (cantidad == 0) {
+        *numero = 1;
+    } else if (leerRegistroEn(ARCHIVO_ALQUILERES, &ultimo, sizeof(Alquiler), cantidad - 1)) {
+        *numero = ultimo.numero + 1;
+    } else {
+        printf("Error: no se pudo leer el ultimo alquiler del archivo.\n");
+        ok = 0;
     }
 
-    return indiceAlquiler(alquileres, cantidad, numero);
+    return ok;
 }
 
 int clienteTieneAlquilerActivo(const char dni[])
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    int cantidad;
-    int i;
+    FILE *archivo = abrirLectura(ARCHIVO_ALQUILERES);
+    Alquiler alquiler;
+    int resultado = 0;
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return -1;
-    }
-
-    for (i = 0; i < cantidad; i++) {
-        if (alquileres[i].estado == ALQUILER_ACTIVO &&
-            strcmp(alquileres[i].dniCliente, dni) == 0) {
-            return 1;
+    if (archivo == NULL) {
+        printf("Error: no se pudo abrir el archivo de alquileres.\n");
+        resultado = -1;
+    } else {
+        while (resultado == 0 && leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            if (alquiler.estado == ALQUILER_ACTIVO && strcmp(alquiler.dniCliente, dni) == 0) {
+                resultado = 1;
+            }
         }
+        cerrarArchivo(archivo);
     }
 
-    return 0;
+    return resultado;
 }
 
-/* =========================================================
-   CALCULOS Y PRESENTACION
-   ========================================================= */
+/* Devuelve 1 si el vehiculo ya tiene un alquiler con fecha posterior a "hoy".
+   Sirve para que no se registre un alquiler "en el pasado" de un vehiculo.
+   Devuelve -1 si no se pudo abrir el archivo. */
+static int vehiculoTieneFechaPosterior(const char patente[], Fecha hoy)
+{
+    FILE *archivo = abrirLectura(ARCHIVO_ALQUILERES);
+    Alquiler alquiler;
+    Fecha ultima;
+    int resultado = 0;
+
+    if (archivo == NULL) {
+        printf("Error: no se pudo abrir el archivo de alquileres.\n");
+        resultado = -1;
+    } else {
+        while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            if (strcmp(alquiler.patente, patente) == 0 && alquiler.estado != ALQUILER_CANCELADO) {
+                ultima = alquiler.fechaInicio;
+
+                if (alquiler.estado == ALQUILER_FINALIZADO) {
+                    ultima = alquiler.fechaDevolucion;
+                }
+
+                if (compararFechas(ultima, hoy) > 0) {
+                    resultado = 1;
+                }
+            }
+        }
+        cerrarArchivo(archivo);
+    }
+
+    return resultado;
+}
+
+/* ---------- Calculos y pantalla ---------- */
 
 float saldoAlquiler(const Alquiler *alquiler)
 {
-    float saldo;
+    float saldo = 0;
 
-    if (alquiler->estado == ALQUILER_CANCELADO) {
-        return 0.0f;
+    if (alquiler->estado != ALQUILER_CANCELADO && alquiler->importeTotal - alquiler->importePagado > 0.005) {
+        saldo = alquiler->importeTotal - alquiler->importePagado;
     }
 
-    saldo = alquiler->importeTotal - alquiler->importePagado;
-
-    return saldo > TOLERANCIA ? saldo : 0.0f;
+    return saldo;
 }
 
-/* El precio pactado se conserva aunque despues se modifique el vehiculo */
-static float precioDiarioPactado(const Alquiler *alquiler)
+int fechaMaquinaCorrecta(const Alquiler *alquiler, Fecha hoy)
 {
-    if (alquiler->cantidadDias > 0) {
-        return alquiler->importeTotal / (float)alquiler->cantidadDias;
+    int correcta = 1;
+
+    if (compararFechas(hoy, alquiler->fechaInicio) < 0) {
+        correcta = 0;
+        printf("Error: la fecha de la maquina (");
+        imprimirFecha(hoy);
+        printf(") es anterior al inicio del alquiler (");
+        imprimirFecha(alquiler->fechaInicio);
+        printf("). Revise la fecha del sistema.\n");
     }
 
-    return 0.0f;
+    return correcta;
 }
 
-void imprimirEncabezadoAlquileres(void)
+void mostrarTablaAlquileres(void)
 {
     printf("%-5s %-9s %-8s %-10s %-10s %-10s %4s %11s %11s %11s  %-10s\n",
            "Nro", "DNI", "Patente", "Inicio", "Prevista", "Devolucion",
            "Dias", "Total", "Pagado", "Saldo", "Estado");
-    printf("---------------------------------------------------------"
-           "---------------------------------------------------\n");
 }
 
-void imprimirFilaAlquiler(const Alquiler *a)
+void mostrarFilaAlquiler(const Alquiler *a)
 {
     printf("%-5d %-9s %-8s ", a->numero, a->dniCliente, a->patente);
     imprimirFecha(a->fechaInicio);
@@ -145,16 +161,16 @@ void imprimirFilaAlquiler(const Alquiler *a)
     imprimirFecha(a->fechaPrevista);
     printf(" ");
     imprimirFecha(a->fechaDevolucion);
-    printf(" %4d %11.2f %11.2f %11.2f  %-10s\n",
-           a->cantidadDias, a->importeTotal, a->importePagado,
-           saldoAlquiler(a), textoEstadoAlquiler(a->estado));
+    printf(" %4d %11.2f %11.2f %11.2f  %-10s\n", a->cantidadDias,
+           a->importeTotal, a->importePagado, saldoAlquiler(a),
+           textoEstadoAlquiler(a->estado));
 }
 
-/* Registra el movimiento economico asociado a un alquiler */
-static int registrarMovimientoDe(const Alquiler *alquiler, TipoMovimiento tipo,
-                                 float monto, Fecha fecha)
+/* Guarda un movimiento del alquiler. Devuelve 1 si se pudo guardar */
+static int guardarMovimiento(const Alquiler *alquiler, TipoMovimiento tipo, float monto, Fecha fecha)
 {
     Movimiento movimiento;
+    int ok;
 
     memset(&movimiento, 0, sizeof(Movimiento));
     movimiento.numeroAlquiler = alquiler->numero;
@@ -164,519 +180,479 @@ static int registrarMovimientoDe(const Alquiler *alquiler, TipoMovimiento tipo,
     strcpy(movimiento.dniCliente, alquiler->dniCliente);
     strcpy(movimiento.patente, alquiler->patente);
 
-    if (!registrarMovimiento(movimiento)) {
-        printf("ADVERTENCIA: la operacion se guardo pero no pudo "
-               "registrarse el movimiento (%s).\n", textoTipoMovimiento(tipo));
-        return 0;
+    ok = registrarMovimiento(movimiento);
+
+    if (!ok) {
+        printf("ADVERTENCIA: no se pudo registrar el movimiento (%s).\n", textoTipoMovimiento(tipo));
     }
 
-    return 1;
+    return ok;
 }
 
-/*
- * Muestra los alquileres activos y pide que se elija uno por su numero.
- * Devuelve la posicion elegida o -1 si no hay activos o el usuario cancela.
- */
-static int seleccionarAlquilerActivo(const Alquiler alquileres[], int cantidad,
-                                     const char *mensaje)
+/* Muestra los alquileres activos y pide el numero de uno.
+   Devuelve 1 si se eligio uno (con su posicion y datos). Si no, ya mostro el motivo. */
+static int elegirAlquilerActivo(const char *mensaje, long *pos, Alquiler *elegido)
 {
-    int i;
+    FILE *archivo = abrirLectura(ARCHIVO_ALQUILERES);
+    Alquiler alquiler;
+    long encontrado;
+    int seguir = 1;
     int activos = 0;
     int numero;
-    int indice;
+    int listo = 0;
 
-    for (i = 0; i < cantidad; i++) {
-        if (alquileres[i].estado == ALQUILER_ACTIVO) {
-            if (activos == 0) {
-                printf("\nAlquileres activos:\n");
-                imprimirEncabezadoAlquileres();
+    if (archivo == NULL) {
+        printf("Error: no se pudo abrir el archivo de alquileres.\n");
+        seguir = 0;
+    } else {
+        while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            if (alquiler.estado == ALQUILER_ACTIVO) {
+                if (activos == 0) {
+                    printf("\nAlquileres activos:\n");
+                    mostrarTablaAlquileres();
+                }
+                mostrarFilaAlquiler(&alquiler);
+                activos++;
             }
+        }
+        cerrarArchivo(archivo);
 
-            imprimirFilaAlquiler(&alquileres[i]);
-            activos++;
+        if (activos == 0) {
+            printf("No hay alquileres activos.\n");
+            seguir = 0;
         }
     }
 
-    if (activos == 0) {
-        printf("No hay alquileres activos.\n");
-        return -1;
+    while (seguir && !listo) {
+        if (!pedirEntero(mensaje, 1, 999999, &numero)) {
+            mostrarCancelado();
+            seguir = 0;
+        } else {
+            encontrado = buscarAlquiler(numero, elegido);
+
+            if (encontrado < -1) {
+                printf("Error: no se pudo abrir el archivo de alquileres.\n");
+                seguir = 0;
+            } else if (encontrado == -1) {
+                printf("Error: no existe el alquiler %d\n", numero);
+            } else if (elegido->estado != ALQUILER_ACTIVO) {
+                printf("Error: el alquiler %d no esta activo (esta %s).\n", numero,
+                       textoEstadoAlquiler(elegido->estado));
+            } else {
+                *pos = encontrado;
+                listo = 1;
+            }
+        }
     }
 
-    printf("\n");
-
-    while (pedirEntero(mensaje, 1, 999999, &numero)) {
-        indice = indiceAlquiler(alquileres, cantidad, numero);
-
-        if (indice < 0) {
-            printf("Error: no existe un alquiler con el numero %d.\n", numero);
-            continue;
-        }
-
-        if (alquileres[indice].estado != ALQUILER_ACTIVO) {
-            printf("Error: el alquiler %d esta %s; solo se pueden operar "
-                   "alquileres activos.\n", numero,
-                   textoEstadoAlquiler(alquileres[indice].estado));
-            continue;
-        }
-
-        return indice;
-    }
-
-    return -1;
+    return listo;
 }
 
-/* =========================================================
-   OPERACIONES
-   ========================================================= */
+/* ---------- Operaciones ---------- */
+
+/* En las operaciones, "seguir" vale 1 mientras no haya habido ningun problema.
+   Cuando algo falla se muestra un mensaje y seguir pasa a 0. */
 
 void realizarAlquiler(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
     Alquiler nuevo;
     Cliente cliente;
     Vehiculo vehiculo;
-    Fecha inicio;
+    Fecha hoy;
     char dni[12];
     char patente[12];
-    int cantidad;
-    int disponibles;
+    int seguir = 1;
     int resultado;
-    int dias;
-    float importe;
+    int disponibles;
+    int dias = 0;
+    int listo;
 
     mostrarTitulo("REALIZAR ALQUILER");
+    hoy = fechaActual();
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
-    }
-
-    if (cantidad >= MAX_ALQUILERES) {
-        printf("Error: se alcanzo el limite de %d alquileres.\n",
-               MAX_ALQUILERES);
-        return;
-    }
-
-    /* Se informa primero que vehiculos se pueden alquilar */
     disponibles = listarVehiculosDisponibles();
 
     if (disponibles <= 0) {
-        return;
+        seguir = 0;
     }
 
-    printf("\n");
-
-    /* Cliente: debe existir y estar activo */
-    while (1) {
+    /* cliente: tiene que existir y estar activo */
+    listo = 0;
+    while (seguir && !listo) {
         if (!pedirDNI(dni)) {
             mostrarCancelado();
-            return;
+            seguir = 0;
+        } else {
+            resultado = obtenerCliente(dni, &cliente);
+
+            if (resultado == -1) {
+                seguir = 0;
+            } else if (resultado == 0) {
+                printf("Error: el cliente no existe. Primero debe registrarlo.\n");
+            } else if (cliente.estado != CLIENTE_ACTIVO) {
+                printf("Error: el cliente esta dado de baja.\n");
+            } else {
+                listo = 1;
+            }
         }
-
-        resultado = obtenerCliente(dni, &cliente);
-
-        if (resultado < 0) {
-            return;
-        }
-
-        if (resultado == 0) {
-            printf("Error: el cliente no existe. Registrelo primero en el "
-                   "menu de clientes.\n");
-            continue;
-        }
-
-        if (cliente.estado != CLIENTE_ACTIVO) {
-            printf("Error: el cliente esta dado de baja.\n");
-            continue;
-        }
-
-        break;
     }
 
-    /* Vehiculo: debe existir y estar disponible */
-    while (1) {
+    /* vehiculo: tiene que existir y estar disponible */
+    listo = 0;
+    while (seguir && !listo) {
         if (!pedirPatente(patente)) {
             mostrarCancelado();
-            return;
+            seguir = 0;
+        } else {
+            resultado = obtenerVehiculo(patente, &vehiculo);
+
+            if (resultado == -1) {
+                seguir = 0;
+            } else if (resultado == 0) {
+                printf("Error: el vehiculo no existe.\n");
+            } else if (vehiculo.estado != VEHICULO_DISPONIBLE) {
+                printf("Error: el vehiculo no esta disponible (esta %s).\n",
+                       textoEstadoVehiculo(vehiculo.estado));
+            } else {
+                listo = 1;
+            }
         }
-
-        resultado = obtenerVehiculo(patente, &vehiculo);
-
-        if (resultado < 0) {
-            return;
-        }
-
-        if (resultado == 0) {
-            printf("Error: el vehiculo no existe.\n");
-            continue;
-        }
-
-        if (vehiculo.estado != VEHICULO_DISPONIBLE) {
-            printf("Error: el vehiculo no esta disponible (estado: %s).\n",
-                   textoEstadoVehiculo(vehiculo.estado));
-            continue;
-        }
-
-        break;
     }
 
-    if (!pedirFecha("Fecha de inicio del alquiler", &inicio)) {
+    /* la fecha de hoy no puede ser anterior a un alquiler ya registrado del vehiculo */
+    if (seguir) {
+        resultado = vehiculoTieneFechaPosterior(patente, hoy);
+
+        if (resultado == 1) {
+            printf("Error: ese vehiculo tiene un alquiler registrado con fecha posterior a hoy.\n");
+            printf("Revise la fecha de la maquina.\n");
+        }
+
+        if (resultado != 0) {
+            seguir = 0;
+        }
+    }
+
+    if (seguir && !pedirEntero("Cantidad de dias", 1, 365, &dias)) {
         mostrarCancelado();
-        return;
+        seguir = 0;
     }
 
-    if (!pedirEntero("Cantidad de dias", 1, MAX_DIAS_ALQUILER, &dias)) {
-        mostrarCancelado();
-        return;
-    }
+    if (seguir) {
+        memset(&nuevo, 0, sizeof(Alquiler));
+        strcpy(nuevo.dniCliente, dni);
+        strcpy(nuevo.patente, patente);
+        nuevo.fechaInicio = hoy;
+        nuevo.fechaPrevista = sumarDias(hoy, dias);
+        nuevo.cantidadDias = dias;
+        nuevo.importeTotal = vehiculo.precioDia * dias;
+        nuevo.importePagado = 0;
+        nuevo.estado = ALQUILER_ACTIVO;
 
-    memset(&nuevo, 0, sizeof(Alquiler));
-    nuevo.numero = nuevoNumero(alquileres, cantidad);
-    strcpy(nuevo.dniCliente, dni);
-    strcpy(nuevo.patente, patente);
-    nuevo.fechaInicio = inicio;
-    nuevo.fechaPrevista = sumarDias(inicio, dias);
-    nuevo.cantidadDias = dias;
-    importe = vehiculo.precioDia * (float)dias;
-    nuevo.importeTotal = importe;
-    nuevo.importePagado = 0.0f;
-    nuevo.estado = ALQUILER_ACTIVO;
+        printf("\n--- RESUMEN ---\n");
+        printf("Cliente:             %s (%s)\n", cliente.nombre, cliente.dni);
+        printf("Vehiculo:            %s %s (%s)\n", vehiculo.marca, vehiculo.modelo, vehiculo.patente);
+        printf("Fecha de inicio:     ");
+        imprimirFecha(nuevo.fechaInicio);
+        printf("\nDevolucion prevista: ");
+        imprimirFecha(nuevo.fechaPrevista);
+        printf("\nDias:                %d\n", dias);
+        printf("Precio por dia:      $%.2f\n", vehiculo.precioDia);
+        printf("Importe total:       $%.2f\n\n", nuevo.importeTotal);
 
-    printf("\n--- RESUMEN DEL ALQUILER ---\n");
-    printf("Cliente:           %s (%s)\n", cliente.nombre, cliente.dni);
-    printf("Vehiculo:          %s %s (%s)\n", vehiculo.marca,
-           vehiculo.modelo, vehiculo.patente);
-    printf("Fecha de inicio:   ");
-    imprimirFecha(nuevo.fechaInicio);
-    printf("\nDevolucion prevista: ");
-    imprimirFecha(nuevo.fechaPrevista);
-    printf("\nCantidad de dias:  %d\n", dias);
-    printf("Precio por dia:    $%.2f\n", vehiculo.precioDia);
-    printf("Importe total:     $%.2f\n\n", importe);
-
-    if (!confirmar("Confirmar alquiler")) {
-        mostrarCancelado();
-        return;
-    }
-
-    alquileres[cantidad] = nuevo;
-
-    if (!guardarAlquileres(alquileres, cantidad + 1)) {
-        return;
-    }
-
-    if (!actualizarEstadoVehiculo(patente, VEHICULO_ALQUILADO)) {
-        /* Se deshace el alquiler para no dejar datos inconsistentes */
-        if (!guardarAlquileres(alquileres, cantidad)) {
-            printf("ADVERTENCIA: no se pudo deshacer el alquiler. "
-                   "Revise los datos.\n");
+        if (!confirmar("Confirmar el alquiler")) {
+            mostrarCancelado();
+            seguir = 0;
         }
-
-        printf("Error: no se pudo actualizar el estado del vehiculo. "
-               "El alquiler no fue registrado.\n");
-        return;
     }
 
-    registrarMovimientoDe(&nuevo, MOV_ALQUILER, importe, inicio);
+    /* primero se marca el vehiculo y despues se agrega el alquiler.
+       Si falla el alta, el vehiculo vuelve a quedar disponible. */
+    if (seguir && !actualizarEstadoVehiculo(patente, VEHICULO_ALQUILADO)) {
+        seguir = 0;
+    }
 
-    printf("\nAlquiler registrado correctamente. Numero de alquiler: %d\n",
-           nuevo.numero);
+    if (seguir) {
+        if (!proximoNumero(&nuevo.numero) ||
+            !agregarRegistro(ARCHIVO_ALQUILERES, &nuevo, sizeof(Alquiler))) {
+            printf("Error: no se pudo guardar el alquiler en el archivo.\n");
+
+            if (!actualizarEstadoVehiculo(patente, VEHICULO_DISPONIBLE)) {
+                printf("ADVERTENCIA: no se pudo dejar el vehiculo %s como disponible.\n", patente);
+            }
+            printf("El alquiler no se registro.\n");
+        } else {
+            guardarMovimiento(&nuevo, MOV_ALQUILER, nuevo.importeTotal, hoy);
+            printf("\nAlquiler registrado. Numero de alquiler: %d\n", nuevo.numero);
+        }
+    }
 }
 
 void registrarDevolucion(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
+    Alquiler alquiler;
     Alquiler anterior;
-    Alquiler *alquiler;
-    Fecha devolucion;
-    int cantidad;
-    int indice;
-    int diasReales;
-    int diasExtra;
-    float precioDia;
-    float recargo;
-    float importeFinal;
+    Fecha hoy;
+    long pos = -1;
+    int seguir;
+    int diasReales = 0;
+    int diasExtra = 0;
+    float precioDia = 0;
+    float recargo = 0;
+    float importeFinal = 0;
+    float saldo;
 
     mostrarTitulo("REGISTRAR DEVOLUCION");
+    hoy = fechaActual();
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
+    seguir = elegirAlquilerActivo("Numero de alquiler a devolver", &pos, &alquiler);
+
+    if (seguir && !fechaMaquinaCorrecta(&alquiler, hoy)) {
+        seguir = 0;
     }
 
-    indice = seleccionarAlquilerActivo(alquileres, cantidad,
-                                       "Numero de alquiler a devolver");
+    if (seguir) {
+        /* la fecha de devolucion es la de hoy */
+        diasReales = diasEntre(alquiler.fechaInicio, hoy);
 
-    if (indice < 0) {
-        return;
-    }
+        if (diasReales < 1) {
+            diasReales = 1;
+        }
 
-    alquiler = &alquileres[indice];
+        /* se cobran los dias contratados y, si se paso, los dias de mas */
+        if (diasReales > alquiler.cantidadDias) {
+            diasExtra = diasReales - alquiler.cantidadDias;
+        }
 
-    while (1) {
-        if (!pedirFecha("Fecha real de devolucion", &devolucion)) {
+        precioDia = alquiler.importeTotal / alquiler.cantidadDias;
+        recargo = precioDia * diasExtra;
+        importeFinal = alquiler.importeTotal + recargo;
+        saldo = importeFinal - alquiler.importePagado;
+
+        if (saldo < 0.005) {
+            saldo = 0;
+        }
+
+        printf("\n--- RESUMEN DE LA DEVOLUCION ---\n");
+        printf("Alquiler Nro:        %d (%s - %s)\n", alquiler.numero, alquiler.dniCliente, alquiler.patente);
+        printf("Fecha de devolucion: ");
+        imprimirFecha(hoy);
+        printf("\nDias contratados:    %d\n", alquiler.cantidadDias);
+        printf("Dias transcurridos:  %d\n", diasReales);
+        printf("Dias de mas:         %d\n", diasExtra);
+        printf("Precio por dia:      $%.2f\n", precioDia);
+        printf("Recargo:             $%.2f\n", recargo);
+        printf("Importe final:       $%.2f\n", importeFinal);
+        printf("Importe pagado:      $%.2f\n", alquiler.importePagado);
+        printf("Saldo pendiente:     $%.2f\n\n", saldo);
+
+        if (!confirmar("Confirmar la devolucion")) {
             mostrarCancelado();
-            return;
+            seguir = 0;
         }
+    }
 
-        if (compararFechas(devolucion, alquiler->fechaInicio) < 0) {
-            printf("Error: la fecha de devolucion no puede ser anterior a "
-                   "la fecha de inicio (");
-            imprimirFecha(alquiler->fechaInicio);
-            printf(").\n");
-            continue;
+    /* el alquiler se modifica directamente en el archivo.
+       Si despues falla el vehiculo, se vuelve a escribir el alquiler anterior. */
+    if (seguir) {
+        anterior = alquiler;
+        alquiler.fechaDevolucion = hoy;
+        alquiler.cantidadDias = alquiler.cantidadDias + diasExtra;
+        alquiler.importeTotal = importeFinal;
+        alquiler.estado = ALQUILER_FINALIZADO;
+
+        if (!escribirRegistroEn(ARCHIVO_ALQUILERES, &alquiler, sizeof(Alquiler), pos)) {
+            printf("Error: no se pudo guardar el alquiler en el archivo.\n");
+            seguir = 0;
         }
-
-        break;
     }
 
-    /* Se cobran como minimo los dias contratados; los dias que exceden
-       la cantidad contratada se facturan al mismo precio pactado. */
-    diasReales = diasEntre(alquiler->fechaInicio, devolucion);
-
-    if (diasReales < 1) {
-        diasReales = 1;
-    }
-
-    diasExtra = diasReales > alquiler->cantidadDias
-                ? diasReales - alquiler->cantidadDias : 0;
-    precioDia = precioDiarioPactado(alquiler);
-    recargo = precioDia * (float)diasExtra;
-    importeFinal = alquiler->importeTotal + recargo;
-
-    printf("\n--- RESUMEN DE LA DEVOLUCION ---\n");
-    printf("Alquiler Nro:       %d (%s - %s)\n", alquiler->numero,
-           alquiler->dniCliente, alquiler->patente);
-    printf("Dias contratados:   %d\n", alquiler->cantidadDias);
-    printf("Dias transcurridos: %d\n", diasReales);
-    printf("Dias adicionales:   %d\n", diasExtra);
-    printf("Precio por dia:     $%.2f\n", precioDia);
-    printf("Recargo:            $%.2f\n", recargo);
-    printf("Importe final:      $%.2f\n", importeFinal);
-    printf("Importe pagado:     $%.2f\n", alquiler->importePagado);
-    printf("Saldo pendiente:    $%.2f\n\n",
-           importeFinal - alquiler->importePagado > TOLERANCIA
-           ? importeFinal - alquiler->importePagado : 0.0f);
-
-    if (!confirmar("Confirmar devolucion")) {
-        mostrarCancelado();
-        return;
-    }
-
-    anterior = *alquiler;
-
-    alquiler->fechaDevolucion = devolucion;
-    alquiler->cantidadDias = alquiler->cantidadDias + diasExtra;
-    alquiler->importeTotal = importeFinal;
-    alquiler->estado = ALQUILER_FINALIZADO;
-
-    if (!guardarAlquileres(alquileres, cantidad)) {
-        return;
-    }
-
-    if (!actualizarEstadoVehiculo(alquiler->patente, VEHICULO_DISPONIBLE)) {
-        *alquiler = anterior;
-
-        if (!guardarAlquileres(alquileres, cantidad)) {
-            printf("ADVERTENCIA: no se pudo deshacer la devolucion. "
-                   "Revise los datos.\n");
+    if (seguir && !actualizarEstadoVehiculo(alquiler.patente, VEHICULO_DISPONIBLE)) {
+        if (!escribirRegistroEn(ARCHIVO_ALQUILERES, &anterior, sizeof(Alquiler), pos)) {
+            printf("ADVERTENCIA: no se pudo deshacer el cambio del alquiler.\n");
         }
-
-        printf("Error: no se pudo actualizar el vehiculo. "
-               "La devolucion no fue registrada.\n");
-        return;
+        printf("La devolucion no se registro.\n");
+        seguir = 0;
     }
 
-    if (diasExtra > 0) {
-        registrarMovimientoDe(alquiler, MOV_AJUSTE, recargo, devolucion);
-    }
+    if (seguir) {
+        if (diasExtra > 0) {
+            guardarMovimiento(&alquiler, MOV_AJUSTE, recargo, hoy);
+        }
+        guardarMovimiento(&alquiler, MOV_DEVOLUCION, importeFinal, hoy);
 
-    registrarMovimientoDe(alquiler, MOV_DEVOLUCION, importeFinal, devolucion);
+        printf("\nDevolucion registrada correctamente.\n");
 
-    printf("\nDevolucion registrada correctamente.\n");
-
-    if (saldoAlquiler(alquiler) > 0) {
-        printf("El cliente adeuda $%.2f. Puede registrar el pago desde "
-               "el menu de pagos.\n", saldoAlquiler(alquiler));
+        if (saldoAlquiler(&alquiler) > 0) {
+            printf("El cliente debe $%.2f. Puede pagarlo desde el menu de pagos.\n", saldoAlquiler(&alquiler));
+        }
     }
 }
 
 void modificarAlquiler(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    Alquiler *alquiler;
-    Fecha fecha;
-    int cantidad;
-    int indice;
-    int nuevosDias;
-    float precioDia;
-    float nuevoImporte;
-    float diferencia;
+    Alquiler alquiler;
+    Fecha hoy;
+    long pos = -1;
+    int seguir;
+    int nuevosDias = 0;
+    float precioDia = 0;
+    float nuevoImporte = 0;
+    float diferencia = 0;
 
     mostrarTitulo("MODIFICAR ALQUILER");
+    hoy = fechaActual();
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
+    seguir = elegirAlquilerActivo("Numero de alquiler a modificar", &pos, &alquiler);
+
+    if (seguir && !fechaMaquinaCorrecta(&alquiler, hoy)) {
+        seguir = 0;
     }
 
-    indice = seleccionarAlquilerActivo(alquileres, cantidad,
-                                       "Numero de alquiler a modificar");
+    if (seguir) {
+        precioDia = alquiler.importeTotal / alquiler.cantidadDias;
+        printf("\nDias actuales: %d (a $%.2f por dia)\n", alquiler.cantidadDias, precioDia);
 
-    if (indice < 0) {
-        return;
+        if (!pedirEntero("Nueva cantidad de dias", 1, 365, &nuevosDias)) {
+            mostrarCancelado();
+            seguir = 0;
+        } else if (nuevosDias == alquiler.cantidadDias) {
+            printf("Es la misma cantidad de dias. No hay cambios.\n");
+            seguir = 0;
+        }
     }
 
-    alquiler = &alquileres[indice];
-    precioDia = precioDiarioPactado(alquiler);
+    if (seguir) {
+        nuevoImporte = precioDia * nuevosDias;
 
-    printf("\nSe puede modificar la duracion del alquiler "
-           "(actual: %d dias, $%.2f por dia).\n",
-           alquiler->cantidadDias, precioDia);
-
-    if (!pedirEntero("Nueva cantidad de dias", 1, MAX_DIAS_ALQUILER,
-                     &nuevosDias)) {
-        mostrarCancelado();
-        return;
+        if (nuevoImporte + 0.005 < alquiler.importePagado) {
+            printf("Error: el nuevo importe ($%.2f) es menor a lo que ya pago el cliente ($%.2f).\n",
+                   nuevoImporte, alquiler.importePagado);
+            printf("Elija mas dias o cancele el alquiler.\n");
+            seguir = 0;
+        }
     }
 
-    if (nuevosDias == alquiler->cantidadDias) {
-        printf("La cantidad de dias es la misma. No hay cambios.\n");
-        return;
+    if (seguir) {
+        diferencia = nuevoImporte - alquiler.importeTotal;
+        printf("Nuevo importe total: $%.2f (diferencia: %.2f)\n", nuevoImporte, diferencia);
+
+        if (!confirmar("Confirmar la modificacion")) {
+            mostrarCancelado();
+            seguir = 0;
+        }
     }
 
-    nuevoImporte = precioDia * (float)nuevosDias;
+    if (seguir) {
+        alquiler.cantidadDias = nuevosDias;
+        alquiler.fechaPrevista = sumarDias(alquiler.fechaInicio, nuevosDias);
+        alquiler.importeTotal = nuevoImporte;
 
-    if (nuevoImporte + TOLERANCIA < alquiler->importePagado) {
-        printf("Error: el nuevo importe ($%.2f) es menor a lo ya pagado "
-               "($%.2f). Elija mas dias o cancele el alquiler.\n",
-               nuevoImporte, alquiler->importePagado);
-        return;
+        if (escribirRegistroEn(ARCHIVO_ALQUILERES, &alquiler, sizeof(Alquiler), pos)) {
+            guardarMovimiento(&alquiler, MOV_AJUSTE, diferencia, hoy);
+            printf("\nAlquiler modificado. Nueva devolucion prevista: ");
+            imprimirFecha(alquiler.fechaPrevista);
+            printf("\n");
+        } else {
+            printf("Error: no se pudo guardar el alquiler en el archivo.\n");
+        }
     }
-
-    diferencia = nuevoImporte - alquiler->importeTotal;
-
-    printf("\nNuevo importe total: $%.2f (diferencia: %+.2f)\n",
-           nuevoImporte, diferencia);
-
-    if (!pedirFechaOperacion("Fecha de la modificacion", &fecha)) {
-        mostrarCancelado();
-        return;
-    }
-
-    if (!confirmar("Confirmar modificacion")) {
-        mostrarCancelado();
-        return;
-    }
-
-    alquiler->cantidadDias = nuevosDias;
-    alquiler->fechaPrevista = sumarDias(alquiler->fechaInicio, nuevosDias);
-    alquiler->importeTotal = nuevoImporte;
-
-    if (!guardarAlquileres(alquileres, cantidad)) {
-        return;
-    }
-
-    registrarMovimientoDe(alquiler, MOV_AJUSTE, diferencia, fecha);
-
-    printf("\nAlquiler modificado correctamente. Nueva devolucion "
-           "prevista: ");
-    imprimirFecha(alquiler->fechaPrevista);
-    printf("\n");
 }
 
 void cancelarAlquiler(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
+    Alquiler alquiler;
     Alquiler anterior;
-    Alquiler *alquiler;
-    Fecha fecha;
-    int cantidad;
-    int indice;
-    float reembolso;
+    Fecha hoy;
+    long pos = -1;
+    int seguir;
+    float devolucion = 0;
 
     mostrarTitulo("CANCELAR ALQUILER");
+    hoy = fechaActual();
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
+    seguir = elegirAlquilerActivo("Numero de alquiler a cancelar", &pos, &alquiler);
+
+    if (seguir && !fechaMaquinaCorrecta(&alquiler, hoy)) {
+        seguir = 0;
     }
 
-    indice = seleccionarAlquilerActivo(alquileres, cantidad,
-                                       "Numero de alquiler a cancelar");
+    if (seguir) {
+        devolucion = alquiler.importePagado;
 
-    if (indice < 0) {
-        return;
-    }
+        printf("\n--- RESUMEN DE LA CANCELACION ---\n");
+        printf("Alquiler Nro:   %d (%s - %s)\n", alquiler.numero, alquiler.dniCliente, alquiler.patente);
+        printf("Importe total:  $%.2f\n", alquiler.importeTotal);
+        printf("Importe pagado: $%.2f\n", alquiler.importePagado);
 
-    alquiler = &alquileres[indice];
-    reembolso = alquiler->importePagado;
-
-    if (reembolso > TOLERANCIA) {
-        printf("\nEl cliente habia pagado $%.2f, que se registrara como "
-               "reembolso.\n", reembolso);
-    }
-
-    if (!pedirFechaOperacion("Fecha de la cancelacion", &fecha)) {
-        mostrarCancelado();
-        return;
-    }
-
-    if (!confirmar("Confirmar la cancelacion del alquiler")) {
-        mostrarCancelado();
-        return;
-    }
-
-    anterior = *alquiler;
-
-    alquiler->estado = ALQUILER_CANCELADO;
-    alquiler->importePagado = 0.0f;
-
-    if (!guardarAlquileres(alquileres, cantidad)) {
-        return;
-    }
-
-    if (!actualizarEstadoVehiculo(alquiler->patente, VEHICULO_DISPONIBLE)) {
-        *alquiler = anterior;
-
-        if (!guardarAlquileres(alquileres, cantidad)) {
-            printf("ADVERTENCIA: no se pudo deshacer la cancelacion. "
-                   "Revise los datos.\n");
+        if (devolucion > 0.005) {
+            printf("CLIENTE - DEVOLUCION: se le devuelve $%.2f (todo lo que habia pagado).\n\n", devolucion);
+        } else {
+            printf("Cliente - devolucion: no corresponde (no hay pagos registrados).\n\n");
         }
 
-        printf("Error: no se pudo actualizar el vehiculo. "
-               "El alquiler no fue cancelado.\n");
-        return;
+        if (!confirmar("Confirmar la cancelacion")) {
+            mostrarCancelado();
+            seguir = 0;
+        }
     }
 
-    if (reembolso > TOLERANCIA) {
-        registrarMovimientoDe(alquiler, MOV_AJUSTE, -reembolso, fecha);
+    if (seguir) {
+        anterior = alquiler;
+        alquiler.estado = ALQUILER_CANCELADO;
+        alquiler.importePagado = 0;
+
+        if (!escribirRegistroEn(ARCHIVO_ALQUILERES, &alquiler, sizeof(Alquiler), pos)) {
+            printf("Error: no se pudo guardar el alquiler en el archivo.\n");
+            seguir = 0;
+        }
     }
 
-    printf("\nAlquiler cancelado correctamente. El vehiculo %s vuelve a "
-           "estar disponible.\n", alquiler->patente);
+    if (seguir && !actualizarEstadoVehiculo(alquiler.patente, VEHICULO_DISPONIBLE)) {
+        if (!escribirRegistroEn(ARCHIVO_ALQUILERES, &anterior, sizeof(Alquiler), pos)) {
+            printf("ADVERTENCIA: no se pudo deshacer el cambio del alquiler.\n");
+        }
+        printf("El alquiler no se cancelo.\n");
+        seguir = 0;
+    }
+
+    if (seguir) {
+        printf("\nAlquiler cancelado. El vehiculo %s vuelve a estar disponible.\n", alquiler.patente);
+
+        if (devolucion > 0.005) {
+            if (guardarMovimiento(&alquiler, MOV_AJUSTE, -devolucion, hoy)) {
+                printf("CLIENTE - DEVOLUCION registrada: $%.2f a favor del cliente (DNI %s).\n",
+                       devolucion, alquiler.dniCliente);
+            } else {
+                printf("ATENCION: hay que devolver $%.2f al cliente (DNI %s) pero no quedo registrado.\n",
+                       devolucion, alquiler.dniCliente);
+            }
+        }
+    }
 }
 
 void listarAlquileres(void)
 {
-    Alquiler alquileres[MAX_ALQUILERES];
-    int cantidad;
-    int i;
+    FILE *archivo;
+    Alquiler alquiler;
+    int cantidad = 0;
 
     mostrarTitulo("LISTADO DE ALQUILERES");
+    archivo = abrirLectura(ARCHIVO_ALQUILERES);
 
-    if (!cargarAlquileres(alquileres, &cantidad)) {
-        return;
+    if (archivo == NULL) {
+        printf("Error: no se pudo abrir el archivo de alquileres.\n");
+    } else {
+        mostrarTablaAlquileres();
+
+        while (leerSiguiente(archivo, &alquiler, sizeof(Alquiler))) {
+            mostrarFilaAlquiler(&alquiler);
+            cantidad++;
+        }
+
+        cerrarArchivo(archivo);
+        printf("\nTotal de alquileres: %d\n", cantidad);
     }
-
-    if (cantidad == 0) {
-        printf("No hay alquileres registrados.\n");
-        return;
-    }
-
-    imprimirEncabezadoAlquileres();
-
-    for (i = 0; i < cantidad; i++) {
-        imprimirFilaAlquiler(&alquileres[i]);
-    }
-
-    printf("\nTotal de alquileres: %d\n", cantidad);
 }
 
 void menuAlquileres(void)
@@ -684,28 +660,27 @@ void menuAlquileres(void)
     int opcion;
 
     do {
-        printf("\n========================================\n");
-        printf("         GESTION DE ALQUILERES\n");
-        printf("========================================\n");
+        printf("\n========== MENU ALQUILERES ==========\n");
         printf("1. Realizar alquiler\n");
         printf("2. Registrar devolucion\n");
         printf("3. Modificar alquiler\n");
         printf("4. Cancelar alquiler\n");
         printf("5. Listar alquileres\n");
-        printf("0. Volver al menu principal\n");
-        printf("========================================\n");
+        printf("0. Volver\n");
+        opcion = leerOpcion("Opcion: ");
 
-        opcion = leerOpcion("Seleccione una opcion: ");
-
-        switch (opcion) {
-            case 1: realizarAlquiler();     break;
-            case 2: registrarDevolucion();  break;
-            case 3: modificarAlquiler();    break;
-            case 4: cancelarAlquiler();     break;
-            case 5: listarAlquileres();     break;
-            case 0:                         break;
-            default: printf("Opcion invalida.\n");
+        if (opcion == 1) {
+            realizarAlquiler();
+        } else if (opcion == 2) {
+            registrarDevolucion();
+        } else if (opcion == 3) {
+            modificarAlquiler();
+        } else if (opcion == 4) {
+            cancelarAlquiler();
+        } else if (opcion == 5) {
+            listarAlquileres();
+        } else if (opcion != 0) {
+            printf("Opcion invalida.\n");
         }
-
     } while (opcion != 0);
 }

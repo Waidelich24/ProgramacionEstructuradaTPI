@@ -1,6 +1,6 @@
 [Project]
-FileName=tpi.dev
-Name=tpi
+FileName=Tpi.dev
+Name=Tpi
 Type=1
 Ver=2
 ObjFiles=
@@ -140,6 +140,16 @@ Priority=1000
 OverrideBuildCmd=0
 BuildCmd=
 
+[Unit10]
+FileName=main.c
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
 [Unit11]
 FileName=movimientos.c
 CompileCpp=1
@@ -192,26 +202,6 @@ BuildCmd=
 
 [Unit16]
 FileName=vehiculos.h
-CompileCpp=1
-Folder=
-Compile=1
-Link=1
-Priority=1000
-OverrideBuildCmd=0
-BuildCmd=
-
-[Unit17]
-FileName=vehiculos.h
-CompileCpp=1
-Folder=
-Compile=1
-Link=1
-Priority=1000
-OverrideBuildCmd=0
-BuildCmd=
-
-[Unit10]
-FileName=main.c
 CompileCpp=1
 Folder=
 Compile=1

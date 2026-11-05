@@ -8,170 +8,169 @@
 #include "archivos.h"
 #include "utiles.h"
 
-/* =========================================================
-   ACCESO A ARCHIVO
-   ========================================================= */
-
-static int leerClientes(Cliente clientes[], int *cantidad)
+/* Busca un cliente por DNI leyendo el archivo.
+   Devuelve la posicion, -1 si no existe y -2 si no se pudo abrir el archivo */
+static long buscarCliente(const char dni[], Cliente *encontrado)
 {
-    int resultado = leerRegistros(ARCHIVO_CLIENTES, clientes,
-                                  sizeof(Cliente), MAX_CLIENTES);
+    FILE *archivo = abrirLectura(ARCHIVO_CLIENTES);
+    Cliente cliente;
+    long pos = -1;
+    long i = 0;
 
-    if (resultado < 0) {
-        printf("Error: no se pudo leer el archivo de clientes (%s).\n",
-               ARCHIVO_CLIENTES);
-        return 0;
-    }
-
-    *cantidad = resultado;
-    return 1;
-}
-
-static int guardarClientes(const Cliente clientes[], int cantidad)
-{
-    if (!guardarRegistros(ARCHIVO_CLIENTES, clientes,
-                          sizeof(Cliente), cantidad)) {
-        printf("Error: no se pudo guardar el archivo de clientes.\n");
-        return 0;
-    }
-
-    return 1;
-}
-
-static int posicionCliente(const Cliente clientes[], int cantidad,
-                           const char dni[])
-{
-    int i;
-
-    for (i = 0; i < cantidad; i++) {
-        if (strcmp(clientes[i].dni, dni) == 0) {
-            return i;
+    if (archivo == NULL) {
+        pos = -2;
+    } else {
+        while (pos == -1 && leerSiguiente(archivo, &cliente, sizeof(Cliente))) {
+            if (strcmp(cliente.dni, dni) == 0) {
+                pos = i;
+                *encontrado = cliente;
+            }
+            i++;
         }
+        cerrarArchivo(archivo);
     }
 
-    return -1;
+    return pos;
 }
 
 int buscarClientePorDNI(const char dni[])
 {
-    Cliente clientes[MAX_CLIENTES];
-    int cantidad;
+    Cliente cliente;
 
-    if (!leerClientes(clientes, &cantidad)) {
-        return -1;
-    }
-
-    return posicionCliente(clientes, cantidad, dni);
+    return (int)buscarCliente(dni, &cliente);
 }
 
 int obtenerCliente(const char dni[], Cliente *cliente)
 {
-    Cliente clientes[MAX_CLIENTES];
-    int cantidad;
-    int posicion;
+    long pos = buscarCliente(dni, cliente);
+    int resultado = 1;
 
-    if (!leerClientes(clientes, &cantidad)) {
-        return -1;
+    if (pos == -1) {
+        resultado = 0;
+    } else if (pos < -1) {
+        printf("Error: no se pudo abrir el archivo de clientes.\n");
+        resultado = -1;
     }
 
-    posicion = posicionCliente(clientes, cantidad, dni);
-
-    if (posicion < 0) {
-        return 0;
-    }
-
-    *cliente = clientes[posicion];
-    return 1;
+    return resultado;
 }
 
-/* =========================================================
-   VALIDACIONES DE CAMPOS
-   ========================================================= */
+/* ---------- Carga de datos ---------- */
 
-static int nombreValido(const char *texto)
+static int pedirNombre(char nombre[])
 {
+    char texto[200];
     int i;
-    int hayLetra = 0;
+    int hayNumeros;
+    int valido = 0;
 
-    for (i = 0; texto[i] != '\0'; i++) {
-        if (isdigit((unsigned char)texto[i])) {
-            return 0;
+    while (!valido && pedirTexto("Apellido y nombre", texto, 200)) {
+        hayNumeros = 0;
+        for (i = 0; texto[i] != '\0'; i++) {
+            if (isdigit((unsigned char)texto[i])) {
+                hayNumeros = 1;
+            }
         }
 
-        if (isalpha((unsigned char)texto[i])) {
-            hayLetra = 1;
+        if (hayNumeros) {
+            printf("Error: el nombre no puede tener numeros.\n");
+        } else if (strlen(texto) >= 80) {
+            printf("Error: el nombre es demasiado largo.\n");
+        } else {
+            strcpy(nombre, texto);
+            valido = 1;
         }
     }
 
-    return hayLetra;
+    return valido;
 }
 
-static int telefonoValido(const char *texto)
+static int pedirTelefono(char telefono[])
 {
+    char texto[200];
     int i;
-    int digitos = 0;
+    int digitos;
+    int caracteresMalos;
+    int valido = 0;
 
-    for (i = 0; texto[i] != '\0'; i++) {
-        if (isdigit((unsigned char)texto[i])) {
-            digitos++;
-        } else if (texto[i] != '+' && texto[i] != '-' &&
-                   texto[i] != ' ' && texto[i] != '(' &&
-                   texto[i] != ')') {
-            return 0;
+    while (!valido && pedirTexto("Telefono", texto, 200)) {
+        digitos = 0;
+        caracteresMalos = 0;
+        for (i = 0; texto[i] != '\0'; i++) {
+            if (isdigit((unsigned char)texto[i])) {
+                digitos++;
+            } else if (texto[i] != '-' && texto[i] != ' ' && texto[i] != '+') {
+                caracteresMalos = 1;
+            }
+        }
+
+        if (caracteresMalos || digitos < 6 || strlen(texto) >= 24) {
+            printf("Error: telefono invalido (minimo 6 numeros, puede llevar - o +).\n");
+        } else {
+            strcpy(telefono, texto);
+            valido = 1;
         }
     }
 
-    return digitos >= 6;
+    return valido;
 }
 
-static int emailValido(const char *texto)
+static int pedirEmail(char email[])
 {
-    const char *arroba = strchr(texto, '@');
-    const char *punto;
+    char texto[200];
+    char *arroba;
+    int valido = 0;
 
-    if (strchr(texto, ' ') != NULL || arroba == NULL ||
-        arroba == texto || strchr(arroba + 1, '@') != NULL) {
-        return 0;
+    while (!valido && pedirTexto("E-mail", texto, 200)) {
+        arroba = strchr(texto, '@');
+
+        if (arroba == NULL || strchr(arroba, '.') == NULL || strchr(texto, ' ') != NULL) {
+            printf("Error: el e-mail debe tener @ y un punto (ej: nombre@mail.com).\n");
+        } else if (strlen(texto) >= 80) {
+            printf("Error: el e-mail es demasiado largo.\n");
+        } else {
+            strcpy(email, texto);
+            valido = 1;
+        }
     }
 
-    punto = strchr(arroba + 1, '.');
-
-    return punto != NULL && punto > arroba + 1 && punto[1] != '\0';
+    return valido;
 }
 
-/* Pide un dato del cliente segun el numero de campo. Devuelve 0 si cancela */
-static int pedirDatoCliente(Cliente *cliente, int campo)
+static int pedirDireccion(char direccion[])
 {
-    switch (campo) {
-        case 1:
-            return pedirCampo("Apellido y nombre", cliente->nombre,
-                              sizeof(cliente->nombre), nombreValido,
-                              "el nombre debe tener letras y no puede "
-                              "contener numeros.");
+    char texto[200];
+    int valido = 0;
 
-        case 2:
-            return pedirCampo("Telefono", cliente->telefono,
-                              sizeof(cliente->telefono), telefonoValido,
-                              "telefono invalido (minimo 6 digitos; solo "
-                              "numeros, espacios, + - y parentesis).");
-
-        case 3:
-            return pedirCampo("E-mail", cliente->email,
-                              sizeof(cliente->email), emailValido,
-                              "e-mail invalido (ejemplo: nombre@dominio.com).");
-
-        case 4:
-            return pedirCampo("Direccion", cliente->direccion,
-                              sizeof(cliente->direccion), NULL, NULL);
-
-        default:
-            return 0;
+    while (!valido && pedirTexto("Direccion", texto, 200)) {
+        if (strlen(texto) >= 120) {
+            printf("Error: la direccion es demasiado larga.\n");
+        } else {
+            strcpy(direccion, texto);
+            valido = 1;
+        }
     }
+
+    return valido;
 }
 
-/* =========================================================
-   PRESENTACION
-   ========================================================= */
+/* Pide el dato numero "campo" del cliente (1 nombre, 2 telefono, 3 mail, 4 direccion) */
+static int pedirDato(Cliente *cliente, int campo)
+{
+    int ok = 0;
+
+    if (campo == 1) {
+        ok = pedirNombre(cliente->nombre);
+    } else if (campo == 2) {
+        ok = pedirTelefono(cliente->telefono);
+    } else if (campo == 3) {
+        ok = pedirEmail(cliente->email);
+    } else if (campo == 4) {
+        ok = pedirDireccion(cliente->direccion);
+    }
+
+    return ok;
+}
 
 static void mostrarCliente(const Cliente *cliente)
 {
@@ -183,117 +182,103 @@ static void mostrarCliente(const Cliente *cliente)
     printf("Direccion:         %s\n", cliente->direccion);
     printf("Fecha de alta:     ");
     imprimirFecha(cliente->fechaAlta);
-    printf("\n");
-    printf("Estado:            %s\n", textoEstadoCliente(cliente->estado));
+    printf("\nEstado:            %s\n", textoEstadoCliente(cliente->estado));
     printf("----------------------------------------\n");
 }
 
-/* =========================================================
-   OPERACIONES
-   ========================================================= */
+/* ---------- Operaciones ---------- */
+
+/* En las operaciones, "seguir" vale 1 mientras no haya habido ningun problema.
+   Cuando algo falla se muestra un mensaje y seguir pasa a 0. */
 
 void altaCliente(void)
 {
-    Cliente clientes[MAX_CLIENTES];
     Cliente nuevo;
-    int cantidad;
-    int posicion;
+    Cliente existente;
+    long pos;
+    int seguir = 1;
     int campo;
 
     mostrarTitulo("ALTA DE CLIENTE");
-
-    if (!leerClientes(clientes, &cantidad)) {
-        return;
-    }
-
     memset(&nuevo, 0, sizeof(Cliente));
 
     if (!pedirDNI(nuevo.dni)) {
         mostrarCancelado();
-        return;
+        seguir = 0;
     }
 
-    posicion = posicionCliente(clientes, cantidad, nuevo.dni);
+    if (seguir) {
+        pos = buscarCliente(nuevo.dni, &existente);
 
-    if (posicion >= 0) {
-        if (clientes[posicion].estado == CLIENTE_ACTIVO) {
+        if (pos < -1) {
+            printf("Error: no se pudo abrir el archivo de clientes.\n");
+            seguir = 0;
+        } else if (pos >= 0 && existente.estado == CLIENTE_ACTIVO) {
             printf("Error: ya existe un cliente activo con ese DNI.\n");
-            mostrarCliente(&clientes[posicion]);
-            return;
-        }
+            seguir = 0;
+        } else if (pos >= 0) {
+            /* el cliente existe pero esta dado de baja: no se crea uno nuevo */
+            printf("Ese cliente esta dado de baja.\n");
+            seguir = 0;
 
-        printf("El DNI corresponde a un cliente dado de baja.\n");
-        mostrarCliente(&clientes[posicion]);
+            if (confirmar("Desea reactivarlo")) {
+                existente.estado = CLIENTE_ACTIVO;
 
-        if (confirmar("Desea reactivar al cliente")) {
-            clientes[posicion].estado = CLIENTE_ACTIVO;
-
-            if (guardarClientes(clientes, cantidad)) {
-                printf("Cliente reactivado correctamente.\n");
+                if (escribirRegistroEn(ARCHIVO_CLIENTES, &existente, sizeof(Cliente), pos)) {
+                    printf("Cliente reactivado correctamente.\n");
+                } else {
+                    printf("Error: no se pudo guardar el cliente en el archivo.\n");
+                }
             }
+        }
+    }
+
+    for (campo = 1; seguir && campo <= 4; campo++) {
+        if (!pedirDato(&nuevo, campo)) {
+            mostrarCancelado();
+            seguir = 0;
+        }
+    }
+
+    if (seguir) {
+        nuevo.fechaAlta = fechaActual();
+        nuevo.estado = CLIENTE_ACTIVO;
+
+        if (agregarRegistro(ARCHIVO_CLIENTES, &nuevo, sizeof(Cliente))) {
+            printf("\nCliente registrado correctamente.\n");
+            mostrarCliente(&nuevo);
         } else {
-            mostrarCancelado();
+            printf("Error: no se pudo guardar el cliente en el archivo.\n");
         }
-
-        return;
-    }
-
-    if (cantidad >= MAX_CLIENTES) {
-        printf("Error: se alcanzo el limite de %d clientes.\n", MAX_CLIENTES);
-        return;
-    }
-
-    for (campo = 1; campo <= 4; campo++) {
-        if (!pedirDatoCliente(&nuevo, campo)) {
-            mostrarCancelado();
-            return;
-        }
-    }
-
-    nuevo.fechaAlta = fechaActual();
-    nuevo.estado = CLIENTE_ACTIVO;
-
-    clientes[cantidad] = nuevo;
-    cantidad++;
-
-    if (guardarClientes(clientes, cantidad)) {
-        printf("\nCliente registrado correctamente.\n");
-        mostrarCliente(&nuevo);
     }
 }
 
 void listarClientes(void)
 {
-    Cliente clientes[MAX_CLIENTES];
-    int cantidad;
-    int i;
+    FILE *archivo;
+    Cliente cliente;
+    int cantidad = 0;
 
     mostrarTitulo("LISTADO DE CLIENTES");
+    archivo = abrirLectura(ARCHIVO_CLIENTES);
 
-    if (!leerClientes(clientes, &cantidad)) {
-        return;
+    if (archivo == NULL) {
+        printf("Error: no se pudo abrir el archivo de clientes.\n");
+    } else {
+        printf("%-9s %-28s %-15s %-26s %-10s %-8s\n", "DNI", "Nombre",
+               "Telefono", "E-mail", "Alta", "Estado");
+
+        while (leerSiguiente(archivo, &cliente, sizeof(Cliente))) {
+            printf("%-9s %-28.28s %-15.15s %-26.26s ", cliente.dni,
+                   cliente.nombre, cliente.telefono, cliente.email);
+            imprimirFecha(cliente.fechaAlta);
+            printf(" %-8s\n", textoEstadoCliente(cliente.estado));
+            cantidad++;
+        }
+
+        cerrarArchivo(archivo);
+        printf("\nTotal de clientes: %d\n", cantidad);
     }
-
-    if (cantidad == 0) {
-        printf("No hay clientes registrados.\n");
-        return;
-    }
-
-    printf("%-9s %-28s %-15s %-26s %-10s %-8s\n",
-           "DNI", "Apellido y nombre", "Telefono", "E-mail",
-           "Alta", "Estado");
-    printf("---------------------------------------------------------"
-           "-------------------------------------\n");
-
-    for (i = 0; i < cantidad; i++) {
-        printf("%-9s %-28.28s %-15.15s %-26.26s ",
-               clientes[i].dni, clientes[i].nombre,
-               clientes[i].telefono, clientes[i].email);
-        imprimirFecha(clientes[i].fechaAlta);
-        printf(" %-8s\n", textoEstadoCliente(clientes[i].estado));
-    }
-
-    printf("\nTotal de clientes: %d\n", cantidad);
 }
 
 void consultarCliente(void)
@@ -306,160 +291,147 @@ void consultarCliente(void)
 
     if (!pedirDNI(dni)) {
         mostrarCancelado();
-        return;
+    } else {
+        resultado = obtenerCliente(dni, &cliente);
+
+        if (resultado == 0) {
+            printf("Error: no existe un cliente con el DNI %s\n", dni);
+        } else if (resultado == 1) {
+            mostrarCliente(&cliente);
+            printf("\nHISTORIAL DE OPERACIONES\n");
+            mostrarHistorialCliente(dni);
+        }
     }
-
-    resultado = obtenerCliente(dni, &cliente);
-
-    if (resultado < 0) {
-        return;
-    }
-
-    if (resultado == 0) {
-        printf("Error: no existe un cliente con el DNI %s.\n", dni);
-        return;
-    }
-
-    mostrarCliente(&cliente);
-
-    printf("\nHISTORIAL DE OPERACIONES\n");
-    mostrarHistorialCliente(dni);
 }
 
 void modificarCliente(void)
 {
-    Cliente clientes[MAX_CLIENTES];
-    Cliente editado;
+    Cliente cliente;
     char dni[12];
-    int cantidad;
-    int posicion;
-    int opcion;
+    long pos = -1;
+    int seguir = 1;
+    int opcion = 0;
     int campo;
 
     mostrarTitulo("MODIFICAR CLIENTE");
 
-    if (!leerClientes(clientes, &cantidad)) {
-        return;
-    }
-
     if (!pedirDNI(dni)) {
         mostrarCancelado();
-        return;
+        seguir = 0;
     }
 
-    posicion = posicionCliente(clientes, cantidad, dni);
+    if (seguir) {
+        pos = buscarCliente(dni, &cliente);
 
-    if (posicion < 0) {
-        printf("Error: no existe un cliente con el DNI %s.\n", dni);
-        return;
+        if (pos == -1) {
+            printf("Error: no existe un cliente con el DNI %s\n", dni);
+            seguir = 0;
+        } else if (pos < -1) {
+            printf("Error: no se pudo abrir el archivo de clientes.\n");
+            seguir = 0;
+        } else if (cliente.estado == CLIENTE_INACTIVO) {
+            printf("Error: el cliente esta dado de baja y no se puede modificar.\n");
+            seguir = 0;
+        }
     }
 
-    if (clientes[posicion].estado == CLIENTE_INACTIVO) {
-        printf("Error: el cliente esta dado de baja. "
-               "Reactivelo desde el alta de clientes.\n");
-        return;
+    if (seguir) {
+        mostrarCliente(&cliente);
+        printf("Que dato desea modificar?\n");
+        printf("1. Nombre\n2. Telefono\n3. E-mail\n4. Direccion\n5. Todos\n0. Cancelar\n");
+        opcion = leerOpcion("Opcion: ");
+
+        if (opcion == 0) {
+            mostrarCancelado();
+            seguir = 0;
+        } else if (opcion < 1 || opcion > 5) {
+            printf("Error: opcion invalida.\n");
+            seguir = 0;
+        }
     }
 
-    printf("\nDatos actuales:");
-    mostrarCliente(&clientes[posicion]);
-
-    printf("Que dato desea modificar?\n");
-    printf("1. Apellido y nombre\n");
-    printf("2. Telefono\n");
-    printf("3. E-mail\n");
-    printf("4. Direccion\n");
-    printf("5. Todos los datos personales\n");
-    printf("0. Cancelar\n");
-
-    opcion = leerOpcion("Seleccione una opcion: ");
-
-    if (opcion == 0) {
-        mostrarCancelado();
-        return;
-    }
-
-    if (opcion < 1 || opcion > 5) {
-        printf("Error: opcion invalida.\n");
-        return;
-    }
-
-    /* Se edita una copia: si el usuario cancela no se altera nada */
-    editado = clientes[posicion];
-
-    if (opcion == 5) {
-        for (campo = 1; campo <= 4; campo++) {
-            if (!pedirDatoCliente(&editado, campo)) {
+    /* se modifica la copia; si el usuario cancela no se toca el archivo */
+    if (seguir && opcion == 5) {
+        for (campo = 1; seguir && campo <= 4; campo++) {
+            if (!pedirDato(&cliente, campo)) {
                 mostrarCancelado();
-                return;
+                seguir = 0;
             }
         }
-    } else if (!pedirDatoCliente(&editado, opcion)) {
+    } else if (seguir && !pedirDato(&cliente, opcion)) {
         mostrarCancelado();
-        return;
+        seguir = 0;
     }
 
-    clientes[posicion] = editado;
-
-    if (guardarClientes(clientes, cantidad)) {
-        printf("\nCliente modificado correctamente.\n");
-        mostrarCliente(&clientes[posicion]);
+    if (seguir) {
+        if (escribirRegistroEn(ARCHIVO_CLIENTES, &cliente, sizeof(Cliente), pos)) {
+            printf("\nCliente modificado correctamente.\n");
+            mostrarCliente(&cliente);
+        } else {
+            printf("Error: no se pudo guardar el cliente en el archivo.\n");
+        }
     }
 }
 
 void bajaLogicaCliente(void)
 {
-    Cliente clientes[MAX_CLIENTES];
+    Cliente cliente;
     char dni[12];
-    int cantidad;
-    int posicion;
+    long pos = -1;
+    int seguir = 1;
     int activo;
 
-    mostrarTitulo("BAJA LOGICA DE CLIENTE");
-
-    if (!leerClientes(clientes, &cantidad)) {
-        return;
-    }
+    mostrarTitulo("BAJA DE CLIENTE");
 
     if (!pedirDNI(dni)) {
         mostrarCancelado();
-        return;
+        seguir = 0;
     }
 
-    posicion = posicionCliente(clientes, cantidad, dni);
+    if (seguir) {
+        pos = buscarCliente(dni, &cliente);
 
-    if (posicion < 0) {
-        printf("Error: no existe un cliente con el DNI %s.\n", dni);
-        return;
+        if (pos == -1) {
+            printf("Error: no existe un cliente con el DNI %s\n", dni);
+            seguir = 0;
+        } else if (pos < -1) {
+            printf("Error: no se pudo abrir el archivo de clientes.\n");
+            seguir = 0;
+        } else if (cliente.estado == CLIENTE_INACTIVO) {
+            printf("Error: el cliente ya esta dado de baja.\n");
+            seguir = 0;
+        }
     }
 
-    if (clientes[posicion].estado == CLIENTE_INACTIVO) {
-        printf("Error: el cliente ya se encuentra dado de baja.\n");
-        return;
+    if (seguir) {
+        activo = clienteTieneAlquilerActivo(dni);
+
+        if (activo == 1) {
+            printf("Error: el cliente tiene un alquiler activo. Primero registre la devolucion.\n");
+        }
+
+        if (activo != 0) {
+            seguir = 0;
+        }
     }
 
-    activo = clienteTieneAlquilerActivo(dni);
+    if (seguir) {
+        mostrarCliente(&cliente);
 
-    if (activo < 0) {
-        return;
+        if (!confirmar("Confirma la baja")) {
+            mostrarCancelado();
+            seguir = 0;
+        }
     }
 
-    if (activo > 0) {
-        printf("Error: el cliente tiene alquileres activos. "
-               "Registre la devolucion antes de darlo de baja.\n");
-        return;
-    }
+    if (seguir) {
+        cliente.estado = CLIENTE_INACTIVO;
 
-    mostrarCliente(&clientes[posicion]);
-
-    if (!confirmar("Confirma la baja del cliente")) {
-        mostrarCancelado();
-        return;
-    }
-
-    clientes[posicion].estado = CLIENTE_INACTIVO;
-
-    if (guardarClientes(clientes, cantidad)) {
-        printf("Cliente dado de baja correctamente.\n");
+        if (escribirRegistroEn(ARCHIVO_CLIENTES, &cliente, sizeof(Cliente), pos)) {
+            printf("Cliente dado de baja correctamente.\n");
+        } else {
+            printf("Error: no se pudo guardar el cliente en el archivo.\n");
+        }
     }
 }
 
@@ -468,28 +440,27 @@ void menuClientes(void)
     int opcion;
 
     do {
-        printf("\n========================================\n");
-        printf("             MENU CLIENTES\n");
-        printf("========================================\n");
+        printf("\n========== MENU CLIENTES ==========\n");
         printf("1. Alta de cliente\n");
         printf("2. Modificar cliente\n");
-        printf("3. Consultar cliente (datos e historial)\n");
+        printf("3. Consultar cliente\n");
         printf("4. Listar clientes\n");
-        printf("5. Baja logica de cliente\n");
-        printf("0. Volver al menu principal\n");
-        printf("========================================\n");
+        printf("5. Baja de cliente\n");
+        printf("0. Volver\n");
+        opcion = leerOpcion("Opcion: ");
 
-        opcion = leerOpcion("Seleccione una opcion: ");
-
-        switch (opcion) {
-            case 1: altaCliente();        break;
-            case 2: modificarCliente();   break;
-            case 3: consultarCliente();   break;
-            case 4: listarClientes();     break;
-            case 5: bajaLogicaCliente();  break;
-            case 0:                       break;
-            default: printf("Opcion invalida.\n");
+        if (opcion == 1) {
+            altaCliente();
+        } else if (opcion == 2) {
+            modificarCliente();
+        } else if (opcion == 3) {
+            consultarCliente();
+        } else if (opcion == 4) {
+            listarClientes();
+        } else if (opcion == 5) {
+            bajaLogicaCliente();
+        } else if (opcion != 0) {
+            printf("Opcion invalida.\n");
         }
-
     } while (opcion != 0);
 }

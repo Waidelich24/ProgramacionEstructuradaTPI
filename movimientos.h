@@ -7,20 +7,17 @@ void menuMovimientos(void);
 void registrarPago(void);
 void consultarMovimientos(void);
 
-/* Agrega el movimiento al archivo binario (asigna el numero) y actualiza
-   el archivo de texto del cliente. Devuelve 1 si se registro. */
+/* Agrega el movimiento a movimientos.dat (le pone el numero) y una linea
+   al archivo de texto del cliente. Devuelve 1 si salio bien */
 int registrarMovimiento(Movimiento movimiento);
 
-/* Regenera movimientos_DNI.txt a partir de movimientos.dat (un registro por
-   linea). Devuelve 1 si se genero correctamente. */
+/* Vuelve a crear movimientos_DNI.txt con los movimientos del cliente (uno por linea). Devuelve 1 si salio bien */
 int generarHistorialCliente(const char dni[]);
 
-/* Muestra por pantalla los movimientos de un cliente.
-   Devuelve la cantidad mostrada o -1 si hubo error. */
+/* Muestra los movimientos de un cliente. Devuelve cuantos son (-1 si hay error) */
 int mostrarHistorialCliente(const char dni[]);
 
-/* Tabla comun para mostrar movimientos (listados y consultas) */
-void imprimirEncabezadoMovimientos(void);
-void imprimirFilaMovimiento(const Movimiento *movimiento);
+void mostrarTablaMovimientos(void);
+void mostrarFilaMovimiento(const Movimiento *movimiento);
 
 #endif
