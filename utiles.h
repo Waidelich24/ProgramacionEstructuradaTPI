@@ -2,12 +2,25 @@
 #define UTILES_H
 
 #include "estructuras.h"
+#include "errores.h"
 
 /* Las funciones pedirXxx devuelven 1 si el usuario ingreso un dato valido
    y 0 si cancelo (escribiendo 0). Si el dato es incorrecto lo vuelven a pedir. */
 
+<<<<<<< HEAD
+=======
+/*
+ * Convencion de las funciones pedirXxx: devuelven 1 si el usuario ingreso un
+ * dato valido y 0 si cancelo (ingresando 0 o por fin de entrada). Mientras el
+ * dato sea invalido se informa el problema y se vuelve a pedir.
+ */
+
+/* ---------- Presentacion y errores ---------- */
+>>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 void mostrarTitulo(const char *titulo);
 void mostrarCancelado(void);
+const char *textoError(CodigoError error);
+void mostrarError(CodigoError error, const char *detalle);
 
 int leerLinea(const char *mensaje, char texto[], int tam);
 int leerOpcion(const char *mensaje);

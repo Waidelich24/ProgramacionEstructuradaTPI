@@ -15,7 +15,12 @@ int main(void)
 
     /* se comprueba que los archivos se puedan abrir antes de empezar */
     if (!inicializarArchivos()) {
+<<<<<<< HEAD
         printf("No se puede iniciar el sistema.\n");
+=======
+        printf("No se puede iniciar el sistema: revise los permisos de "
+               "la carpeta '%s'.\n", DIRECTORIO_DATOS);
+>>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         resultado = 1;
     } else {
         do {
@@ -29,6 +34,7 @@ int main(void)
             printf("5. Pagos\n");
             printf("6. Consultas y Reportes\n");
             printf("0. Salir\n");
+<<<<<<< HEAD
             opcion = leerOpcion("Seleccione una opcion: ");
 
             if (opcion == 1) {
@@ -48,6 +54,23 @@ int main(void)
             } else {
                 printf("Opcion invalida.\n");
             }
+=======
+            printf("========================================\n");
+
+            opcion = leerOpcion("Seleccione una opcion: ");
+
+            switch (opcion) {
+                case 1: menuClientes();        break;
+                case 2: menuVehiculos();       break;
+                case 3: menuAlquileres();      break;
+                case 4: registrarDevolucion(); break;
+                case 5: menuMovimientos();     break;
+                case 6: menuConsultas();       break;
+                case 0: printf("Cerrando sistema...\n"); break;
+                default: printf("Opcion invalida.\n");
+            }
+
+>>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         } while (opcion != 0);
     }
 
