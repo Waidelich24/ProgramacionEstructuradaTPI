@@ -5,15 +5,6 @@
 
 #include "utiles.h"
 
-<<<<<<< HEAD
-=======
-#define TAM_LINEA 256
-
-/* =========================================================
-   PRESENTACION Y ERRORES
-   ========================================================= */
-
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 void mostrarTitulo(const char *titulo)
 {
     printf("\n========================================\n");
@@ -26,46 +17,7 @@ void mostrarCancelado(void)
     printf("Operacion cancelada. No se guardaron cambios.\n");
 }
 
-<<<<<<< HEAD
 /* ---------- Lectura por teclado ---------- */
-=======
-const char *textoError(CodigoError error)
-{
-    const char *texto;
-
-    switch (error) {
-        case ERR_OK:               texto = "sin errores";                    break;
-        case ERR_CANCELADO:        texto = "operacion cancelada";            break;
-        case ERR_ARCHIVO_ABRIR:    texto = "no se pudo abrir el archivo";    break;
-        case ERR_ARCHIVO_LEER:     texto = "no se pudo leer el archivo";     break;
-        case ERR_ARCHIVO_ESCRIBIR: texto = "no se pudo escribir el archivo"; break;
-        case ERR_NO_ENCONTRADO:    texto = "el registro no existe";          break;
-        case ERR_DUPLICADO:        texto = "el registro ya existe";          break;
-        case ERR_DATO_INVALIDO:    texto = "dato invalido";                  break;
-        case ERR_ESTADO_INVALIDO:  texto = "operacion no permitida por el estado actual"; break;
-        case ERR_SIN_DATOS:        texto = "no hay registros para operar";   break;
-        case ERR_NO_REGISTRADO:    texto = "no se pudo registrar el movimiento"; break;
-        default:                   texto = "error desconocido";              break;
-    }
-
-    return texto;
-}
-
-void mostrarError(CodigoError error, const char *detalle)
-{
-    printf("Error: %s", textoError(error));
-
-    if (detalle != NULL) {
-        printf(" (%s)", detalle);
-    }
-
-    printf(".\n");
-}
-
-/* =========================================================
-   ENTRADA POR TECLADO
-   ========================================================= */
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 
 /* Lee una linea. Devuelve 0 si ya no hay mas datos para leer */
 int leerLinea(const char *mensaje, char texto[], int tam)
@@ -73,24 +25,16 @@ int leerLinea(const char *mensaje, char texto[], int tam)
     int leido = 0;
     int largo;
     int c;
-    int leido = 0;
 
     printf("%s", mensaje);
 
-<<<<<<< HEAD
     if (fgets(texto, tam, stdin) != NULL) {
-=======
-    if (fgets(texto, tam, stdin) == NULL) {
-        texto[0] = '\0';
-    } else {
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         leido = 1;
         largo = strlen(texto);
 
         if (largo > 0 && texto[largo - 1] == '\n') {
             texto[largo - 1] = '\0';
         } else {
-<<<<<<< HEAD
             /* la linea era mas larga que el texto: se descarta el resto */
             while ((c = getchar()) != '\n' && c != EOF) {
             }
@@ -100,43 +44,11 @@ int leerLinea(const char *mensaje, char texto[], int tam)
     }
 
     return leido;
-=======
-            /* Linea mas larga que el buffer: se descarta el resto */
-            while ((c = getchar()) != '\n' && c != EOF) {
-            }
-        }
-
-        recortar(texto);
-    }
-
-    return leido;
-}
-
-/* Convierte un texto a entero verificando que sea todo numerico */
-static int parsearEntero(const char *texto, long *valor)
-{
-    char *fin;
-    long numero;
-    int valido = 0;
-
-    if (texto[0] != '\0') {
-        errno = 0;
-        numero = strtol(texto, &fin, 10);
-
-        if (errno == 0 && *fin == '\0') {
-            *valor = numero;
-            valido = 1;
-        }
-    }
-
-    return valido;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 }
 
 /* Devuelve la opcion elegida, -1 si no es un numero y 0 si no hay mas datos */
 int leerOpcion(const char *mensaje)
 {
-<<<<<<< HEAD
     char texto[100];
     char resto;
     int numero;
@@ -146,16 +58,6 @@ int leerOpcion(const char *mensaje)
         opcion = 0;
     } else if (sscanf(texto, "%d%c", &numero, &resto) == 1 && numero >= 0) {
         opcion = numero;
-=======
-    char texto[TAM_LINEA];
-    long numero;
-    int opcion = -1;
-
-    if (!leerLinea(mensaje, texto, sizeof(texto))) {
-        opcion = 0;
-    } else if (parsearEntero(texto, &numero) && numero >= 0 && numero <= 1000) {
-        opcion = (int)numero;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     }
 
     return opcion;
@@ -163,19 +65,12 @@ int leerOpcion(const char *mensaje)
 
 int confirmar(const char *mensaje)
 {
-<<<<<<< HEAD
     char texto[100];
     char mensajeCompleto[150];
-=======
-    char prompt[200];
-    char texto[TAM_LINEA];
-    size_t largo;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     int respuesta = -1;
 
     sprintf(mensajeCompleto, "%s (S/N): ", mensaje);
 
-<<<<<<< HEAD
     while (respuesta == -1 && leerLinea(mensajeCompleto, texto, 100)) {
         if (strlen(texto) == 1 && (texto[0] == 's' || texto[0] == 'S')) {
             respuesta = 1;
@@ -183,23 +78,6 @@ int confirmar(const char *mensaje)
             respuesta = 0;
         } else {
             printf("Error: responda S o N.\n");
-=======
-    while (respuesta < 0 && leerLinea(prompt, texto, sizeof(texto))) {
-        largo = strlen(texto);
-
-        if (largo == 1 && toupper((unsigned char)texto[0]) == 'S') {
-            respuesta = 1;
-        } else if (largo == 1 && toupper((unsigned char)texto[0]) == 'N') {
-            respuesta = 0;
-        } else if (largo == 2 && toupper((unsigned char)texto[0]) == 'S' &&
-                   toupper((unsigned char)texto[1]) == 'I') {
-            respuesta = 1;
-        } else if (largo == 2 && toupper((unsigned char)texto[0]) == 'N' &&
-                   toupper((unsigned char)texto[1]) == 'O') {
-            respuesta = 0;
-        } else {
-            printf("Error: responda S (si) o N (no).\n");
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         }
     }
 
@@ -208,19 +86,12 @@ int confirmar(const char *mensaje)
 
 int pedirTexto(const char *mensaje, char texto[], int tam)
 {
-<<<<<<< HEAD
     char mensajeCompleto[150];
     int valido = 0;
     int cancelado = 0;
-=======
-    char prompt[200];
-    int valido = 0;
-    int terminado = 0;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 
     sprintf(mensajeCompleto, "%s (0 para cancelar): ", mensaje);
 
-<<<<<<< HEAD
     while (!valido && !cancelado && leerLinea(mensajeCompleto, texto, tam)) {
         if (strcmp(texto, "0") == 0) {
             cancelado = 1;
@@ -228,66 +99,23 @@ int pedirTexto(const char *mensaje, char texto[], int tam)
             printf("Error: no puede quedar vacio.\n");
         } else {
             valido = 1;
-=======
-    while (!terminado && leerLinea(prompt, texto, tam)) {
-        if (strcmp(texto, "0") == 0) {
-            terminado = 1;
-        } else if (texto[0] == '\0') {
-            printf("Error: el campo no puede quedar vacio.\n");
-        } else {
-            valido = 1;
-            terminado = 1;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         }
     }
 
     return valido;
-<<<<<<< HEAD
-=======
-}
-
-int pedirCampo(const char *mensaje, char destino[], int tam,
-               int (*validar)(const char *), const char *mensajeError)
-{
-    char temporal[TAM_LINEA];
-    int valido = 0;
-
-    while (!valido && pedirTexto(mensaje, temporal, sizeof(temporal))) {
-        if ((int)strlen(temporal) >= tam) {
-            printf("Error: el texto no puede superar los %d caracteres.\n",
-                   tam - 1);
-        } else if (validar != NULL && !validar(temporal)) {
-            printf("Error: %s\n", mensajeError);
-        } else {
-            strcpy(destino, temporal);
-            valido = 1;
-        }
-    }
-
-    return valido;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 }
 
 int pedirEntero(const char *mensaje, int min, int max, int *valor)
 {
-<<<<<<< HEAD
     char texto[100];
     char mensajeCompleto[150];
     char resto;
     int numero;
     int valido = 0;
     int cancelado = 0;
-=======
-    char prompt[200];
-    char texto[TAM_LINEA];
-    long numero;
-    int valido = 0;
-    int terminado = 0;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 
     sprintf(mensajeCompleto, "%s (%d a %d, 0 para cancelar): ", mensaje, min, max);
 
-<<<<<<< HEAD
     while (!valido && !cancelado && leerLinea(mensajeCompleto, texto, 100)) {
         if (sscanf(texto, "%d%c", &numero, &resto) != 1) {
             printf("Error: debe ingresar un numero entero.\n");
@@ -298,19 +126,6 @@ int pedirEntero(const char *mensaje, int min, int max, int *valor)
         } else {
             *valor = numero;
             valido = 1;
-=======
-    while (!terminado && leerLinea(prompt, texto, sizeof(texto))) {
-        if (!parsearEntero(texto, &numero)) {
-            printf("Error: debe ingresar un numero entero.\n");
-        } else if (numero == 0) {
-            terminado = 1;
-        } else if (numero < min || numero > max) {
-            printf("Error: el valor debe estar entre %d y %d.\n", min, max);
-        } else {
-            *valor = (int)numero;
-            valido = 1;
-            terminado = 1;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         }
     }
 
@@ -326,28 +141,18 @@ int pedirMonto(const char *mensaje, float maximo, float *valor)
     float numero;
     int i;
     int valido = 0;
-<<<<<<< HEAD
     int cancelado = 0;
-=======
-    int terminado = 0;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 
     sprintf(mensajeCompleto, "%s (0 para cancelar): $", mensaje);
 
-<<<<<<< HEAD
     while (!valido && !cancelado && leerLinea(mensajeCompleto, texto, 100)) {
         /* se acepta la coma como separador decimal */
-=======
-    while (!terminado && leerLinea(prompt, texto, sizeof(texto))) {
-        /* Se acepta la coma como separador decimal */
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         for (i = 0; texto[i] != '\0'; i++) {
             if (texto[i] == ',') {
                 texto[i] = '.';
             }
         }
 
-<<<<<<< HEAD
         if (sscanf(texto, "%f%c", &numero, &resto) != 1) {
             printf("Error: debe ingresar un importe numerico.\n");
         } else if (numero == 0) {
@@ -359,32 +164,6 @@ int pedirMonto(const char *mensaje, float maximo, float *valor)
         } else {
             *valor = numero;
             valido = 1;
-=======
-        errno = 0;
-        numero = strtod(texto, &fin);
-
-        if (texto[0] == '\0') {
-            printf("Error: debe ingresar un importe.\n");
-        } else if (*fin != '\0' || errno != 0 || numero != numero) {
-            printf("Error: el importe debe ser un numero.\n");
-        } else if (numero == 0) {
-            terminado = 1;
-        } else if (numero < 0) {
-            printf("Error: el importe debe ser mayor que cero.\n");
-        } else if (numero > 100000000.0) {
-            printf("Error: el importe ingresado es demasiado grande.\n");
-        } else if (maximo > 0 && numero > (double)maximo + 0.005) {
-            printf("Error: el importe no puede superar $%.2f.\n", maximo);
-        } else {
-            *valor = (float)numero;
-
-            if (maximo > 0 && *valor > maximo) {
-                *valor = maximo;
-            }
-
-            valido = 1;
-            terminado = 1;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         }
     }
 
@@ -396,7 +175,6 @@ int pedirDNI(char dni[])
     char texto[100];
     int largo;
     int i;
-<<<<<<< HEAD
     int soloNumeros;
     int valido = 0;
 
@@ -415,58 +193,13 @@ int pedirDNI(char dni[])
             valido = 1;
         } else {
             printf("Error: el DNI debe tener 7 u 8 numeros.\n");
-=======
-    int digitos;
-    int valido = 0;
-
-    while (!valido && pedirTexto("DNI (7 u 8 digitos)", texto, sizeof(texto))) {
-        largo = (int)strlen(texto);
-        digitos = 1;
-
-        for (i = 0; texto[i] != '\0'; i++) {
-            if (!isdigit((unsigned char)texto[i])) {
-                digitos = 0;
-            }
-        }
-
-        if (digitos && (largo == 7 || largo == 8)) {
-            strcpy(dni, texto);
-            valido = 1;
-        } else {
-            printf("Error: el DNI debe tener 7 u 8 digitos numericos.\n");
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         }
     }
 
     return valido;
 }
 
-<<<<<<< HEAD
 /* Formato viejo: ABC123. Formato nuevo: AB123CD */
-=======
-/* ---------- Patentes ---------- */
-
-/* L = letra, N = digito */
-static int coincidePatron(const char *texto, const char *patron)
-{
-    size_t i;
-    int coincide = (strlen(texto) == strlen(patron));
-
-    for (i = 0; coincide && patron[i] != '\0'; i++) {
-        if (patron[i] == 'L' && !isalpha((unsigned char)texto[i])) {
-            coincide = 0;
-        }
-
-        if (patron[i] == 'N' && !isdigit((unsigned char)texto[i])) {
-            coincide = 0;
-        }
-    }
-
-    return coincide;
-}
-
-/* Formato anterior (ABC123) o Mercosur (AB123CD) */
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 int patenteValida(const char *patente)
 {
     int largo = strlen(patente);
@@ -514,7 +247,6 @@ int patenteValida(const char *patente)
 
 int pedirPatente(char patente[])
 {
-<<<<<<< HEAD
     char texto[100];
     int i;
     int valido = 0;
@@ -523,25 +255,12 @@ int pedirPatente(char patente[])
         for (i = 0; texto[i] != '\0'; i++) {
             texto[i] = toupper((unsigned char)texto[i]);
         }
-=======
-    char texto[TAM_LINEA];
-    int valido = 0;
-
-    while (!valido &&
-           pedirTexto("Patente (ABC123 o AB123CD)", texto, sizeof(texto))) {
-        aMayusculas(texto);
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
 
         if (patenteValida(texto)) {
             strcpy(patente, texto);
             valido = 1;
         } else {
-<<<<<<< HEAD
             printf("Error: patente invalida. Use ABC123 o AB123CD.\n");
-=======
-            printf("Error: formato de patente invalido. "
-                   "Use ABC123 o AB123CD.\n");
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         }
     }
 
@@ -583,34 +302,12 @@ int diasDelMes(int mes, int anio)
 
 int fechaValida(Fecha fecha)
 {
-<<<<<<< HEAD
     int valida = 0;
 
     if (fecha.anio >= 1900 && fecha.anio <= 2100 && fecha.mes >= 1 &&
         fecha.mes <= 12 && fecha.dia >= 1 &&
         fecha.dia <= diasDelMes(fecha.mes, fecha.anio)) {
         valida = 1;
-=======
-    int diasMes;
-    int bisiesto;
-    int valida = 0;
-
-    if (fecha.anio >= ANIO_MINIMO && fecha.anio <= ANIO_MAXIMO &&
-        fecha.mes >= 1 && fecha.mes <= 12 && fecha.dia >= 1) {
-        bisiesto = (fecha.anio % 400 == 0) ||
-                   (fecha.anio % 4 == 0 && fecha.anio % 100 != 0);
-
-        if (fecha.mes == 2) {
-            diasMes = bisiesto ? 29 : 28;
-        } else if (fecha.mes == 4 || fecha.mes == 6 ||
-                   fecha.mes == 9 || fecha.mes == 11) {
-            diasMes = 30;
-        } else {
-            diasMes = 31;
-        }
-
-        valida = fecha.dia <= diasMes;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     }
 
     return valida;
@@ -636,7 +333,6 @@ long fechaADias(Fecha fecha)
 
 int compararFechas(Fecha a, Fecha b)
 {
-<<<<<<< HEAD
     long diasA = fechaADias(a);
     long diasB = fechaADias(b);
     int resultado = 0;
@@ -644,15 +340,6 @@ int compararFechas(Fecha a, Fecha b)
     if (diasA < diasB) {
         resultado = -1;
     } else if (diasA > diasB) {
-=======
-    long da = fechaADias(a);
-    long db = fechaADias(b);
-    int resultado = 0;
-
-    if (da < db) {
-        resultado = -1;
-    } else if (da > db) {
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
         resultado = 1;
     }
 
@@ -709,45 +396,14 @@ int pedirFecha(const char *titulo, Fecha *fecha)
             cancelado = 1;
         } else if (!pedirEntero("  Mes", 1, 12, &leida.mes)) {
             cancelado = 1;
-<<<<<<< HEAD
         } else if (!pedirEntero("  Anio", 1900, 2100, &leida.anio)) {
-=======
-        } else if (!pedirEntero("  Anio", ANIO_MINIMO, ANIO_MAXIMO,
-                                &leida.anio)) {
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
             cancelado = 1;
         } else if (fechaValida(leida)) {
             *fecha = leida;
             valida = 1;
         } else {
-<<<<<<< HEAD
             printf("Error: esa fecha no existe.\n");
         }
-=======
-            printf("Error: la fecha %02d/%02d/%04d no existe en el "
-                   "calendario.\n", leida.dia, leida.mes, leida.anio);
-        }
-    }
-
-    return valida;
-}
-
-/* Ofrece usar la fecha del sistema o ingresar otra */
-int pedirFechaOperacion(const char *titulo, Fecha *fecha)
-{
-    Fecha hoy = fechaActual();
-    int valida;
-
-    printf("%s - fecha actual: ", titulo);
-    imprimirFecha(hoy);
-    printf("\n");
-
-    if (confirmar("Usar la fecha actual")) {
-        *fecha = hoy;
-        valida = 1;
-    } else {
-        valida = pedirFecha("Ingrese la fecha de la operacion", fecha);
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     }
 
     return valida;
@@ -768,7 +424,6 @@ const char *textoEstadoCliente(EstadoCliente estado)
 
 const char *textoEstadoVehiculo(EstadoVehiculo estado)
 {
-<<<<<<< HEAD
     const char *texto = "Disponible";
 
     if (estado == VEHICULO_ALQUILADO) {
@@ -777,16 +432,6 @@ const char *textoEstadoVehiculo(EstadoVehiculo estado)
         texto = "En mantenimiento";
     } else if (estado == VEHICULO_BAJA) {
         texto = "Baja";
-=======
-    const char *texto;
-
-    switch (estado) {
-        case VEHICULO_DISPONIBLE:    texto = "Disponible";       break;
-        case VEHICULO_ALQUILADO:     texto = "Alquilado";        break;
-        case VEHICULO_MANTENIMIENTO: texto = "En mantenimiento"; break;
-        case VEHICULO_BAJA:          texto = "Baja";             break;
-        default:                     texto = "Desconocido";      break;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     }
 
     return texto;
@@ -794,22 +439,12 @@ const char *textoEstadoVehiculo(EstadoVehiculo estado)
 
 const char *textoEstadoAlquiler(EstadoAlquiler estado)
 {
-<<<<<<< HEAD
     const char *texto = "Activo";
 
     if (estado == ALQUILER_FINALIZADO) {
         texto = "Finalizado";
     } else if (estado == ALQUILER_CANCELADO) {
         texto = "Cancelado";
-=======
-    const char *texto;
-
-    switch (estado) {
-        case ALQUILER_ACTIVO:     texto = "Activo";      break;
-        case ALQUILER_FINALIZADO: texto = "Finalizado";  break;
-        case ALQUILER_CANCELADO:  texto = "Cancelado";   break;
-        default:                  texto = "Desconocido"; break;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     }
 
     return texto;
@@ -817,7 +452,6 @@ const char *textoEstadoAlquiler(EstadoAlquiler estado)
 
 const char *textoTipoMovimiento(TipoMovimiento tipo)
 {
-<<<<<<< HEAD
     const char *texto = "Alquiler";
 
     if (tipo == MOV_PAGO) {
@@ -826,16 +460,6 @@ const char *textoTipoMovimiento(TipoMovimiento tipo)
         texto = "Devolucion";
     } else if (tipo == MOV_AJUSTE) {
         texto = "Ajuste";
-=======
-    const char *texto;
-
-    switch (tipo) {
-        case MOV_ALQUILER:   texto = "Alquiler";    break;
-        case MOV_PAGO:       texto = "Pago";        break;
-        case MOV_DEVOLUCION: texto = "Devolucion";  break;
-        case MOV_AJUSTE:     texto = "Ajuste";      break;
-        default:             texto = "Desconocido"; break;
->>>>>>> cc775f8b4f4a69bdce497048da840de352c14ccd
     }
 
     return texto;
